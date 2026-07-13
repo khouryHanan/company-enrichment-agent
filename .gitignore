@@ -1,0 +1,12 @@
+
+# Python generated files
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local database
+agent1.db
+
+# macOS
+.DS_Store
