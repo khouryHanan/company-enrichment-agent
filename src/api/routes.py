@@ -1,10 +1,6 @@
 """
-API Controller — Mission 12.
-
-Endpoints:
-  POST /api/agents/agent1/bulk-enrichment
-  GET  /api/agents/agent1/bulk-enrichment/{batchId}
-  GET  /api/companies/{companyId}
+API Controller — Mission 4 / SCRUM-4 (receiving input) and Mission 12 /
+SCRUM-12 (full endpoint set, added later on this same branch).
 """
 
 from fastapi import APIRouter, HTTPException
@@ -18,9 +14,15 @@ router = APIRouter()
 
 @router.post("/api/agents/agent1/bulk-enrichment", response_model=BulkEnrichmentResponse)
 def start_bulk_enrichment(payload: BulkEnrichmentRequest):
-    if not payload.companies:
-        raise HTTPException(status_code=400, detail="companies list cannot be empty")
+    """
+    Receives a bulk list of companies and kicks off batch processing.
 
+    Structural validation (non-empty list, required fields present) is
+    handled by BulkEnrichmentRequest/CompanyInput in schemas.py — Pydantic
+    rejects malformed requests automatically with a 422 before this
+    function body even runs. Business-rule validation (URL format,
+    duplicates) happens downstream in validation_service.py (SCRUM-5).
+    """
     result = batch_service.start_batch(payload.companies)
     return result
 
