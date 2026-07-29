@@ -1,48 +1,62 @@
 """
-Database Service (Repository) — Mission 8 / SCRUM-8.
+Database Service (Repository) — Mission 8 / SCRUM-8, extended for
+Mission 11 / SCRUM-11's source-reference persistence.
 
 All read/write functions used by the rest of the app live here, so no
 other service touches SQLAlchemy directly.
+
+Note on schema: Company does not have missing_fields/sources_used
+columns — those live inside EnrichmentResult.raw_ai_output (the full
+profile dict is kept there for auditability), and get_company
+reconstructs them from there rather than from separate Company columns.
 """
+
+import uuid
 
 from sqlalchemy.exc import IntegrityError
 
 from src.db.database import SessionLocal
-from src.db.models import Batch, Company, EnrichmentResult, ErrorLog
+from src.db.models import Batch, Company, EnrichmentResult, ErrorLog, Source
 from src.core.errors import DatabaseSaveError, NotFoundError
 from src.core import logging as log
+
+
+def _new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:8]}"
 
 
 def create_batch(status: str, validation) -> str:
     """
     Creates the batch record with the counts from validation_service's
-    ValidationResult. The batch ID is generated here (DB owns ID
-    generation) and returned so the caller can use it for subsequent
-    per-company processing. Duplicate companies are recorded as an
-    error entry each, so they're visible in the errors table too, not
-    just the count.
+    ValidationResult. The batch ID is generated here (models.py doesn't
+    auto-generate IDs) and returned so the caller can use it for
+    subsequent per-company processing. Duplicate/invalid companies are
+    also recorded as error entries, so they're visible in the errors
+    table too, not just the count.
     """
     session = SessionLocal()
     try:
+        batch_id = _new_id("batch")
         batch = Batch(
+            id=batch_id,
             status=status,
             total_received=validation.total_received,
-            valid_companies_count=len(validation.valid_companies),
-            invalid_companies_count=len(validation.invalid_companies),
-            duplicates_count=len(validation.duplicates),
+            valid_companies=len(validation.valid_companies),
+            invalid_companies=len(validation.invalid_companies),
+            duplicates=len(validation.duplicates),
         )
         session.add(batch)
-        session.flush()  # populate batch.id from the default before using it below
-        batch_id = batch.id
 
         for invalid in validation.invalid_companies:
             session.add(ErrorLog(
+                id=_new_id("error"),
                 batch_id=batch_id,
                 error_type="InvalidInputError",
                 message="; ".join(invalid["errors"]),
             ))
         for dup in validation.duplicates:
             session.add(ErrorLog(
+                id=_new_id("error"),
                 batch_id=batch_id,
                 error_type="DuplicateCompanyError",
                 message=dup["reason"],
@@ -99,9 +113,9 @@ def get_batch(batch_id: str) -> dict | None:
             "batchId": batch.id,
             "status": batch.status,
             "totalReceived": batch.total_received,
-            "validCompanies": batch.valid_companies_count,
-            "invalidCompanies": batch.invalid_companies_count,
-            "duplicates": batch.duplicates_count,
+            "validCompanies": batch.valid_companies,
+            "invalidCompanies": batch.invalid_companies,
+            "duplicates": batch.duplicates,
         }
     finally:
         session.close()
@@ -110,15 +124,17 @@ def get_batch(batch_id: str) -> dict | None:
 def save_company(batch_id: str, profile: dict) -> None:
     """
     Persists a company's final merged profile (post-enrichment, post-merge
-    with Agent 3's scan). `profile` is expected to carry both the original
-    input fields (companyName, websiteUrl, domain, linkedinUrl) and the
-    enrichment output fields (description, industry, etc.) — batch_service
-    is responsible for combining these before calling save_company.
+    with Agent 3's scan). The full profile dict — including missingFields
+    and sourcesUsed, which aren't their own Company columns — is kept in
+    EnrichmentResult.raw_ai_output for auditability and later retrieval.
+    Mission 11's source references (field -> URL) are persisted as
+    individual Source rows.
     """
     session = SessionLocal()
     try:
+        company_id = profile.get("companyId") or _new_id("company")
         company = Company(
-            id=profile.get("companyId"),
+            id=company_id,
             batch_id=batch_id,
             company_name=profile["companyName"],
             website_url=profile.get("websiteUrl", profile.get("normalizedWebsite", "")),
@@ -132,12 +148,25 @@ def save_company(batch_id: str, profile: dict) -> None:
             location=profile.get("location"),
             company_size=profile.get("companySize"),
             confidence=profile.get("confidence"),
-            missing_fields=profile.get("missingFields", []),
-            sources_used=profile.get("sourcesUsed", []),
             status=profile.get("status", "Completed"),
         )
         session.add(company)
-        session.add(EnrichmentResult(company_id=company.id, raw_ai_output=profile))
+        session.add(EnrichmentResult(
+            id=_new_id("result"),
+            company_id=company.id,
+            raw_ai_output=profile,
+        ))
+
+        # Mission 11: persist which URL backs which piece of confirmed
+        # website evidence, kept separate from the AI-generated fields.
+        for ref in profile.get("sourceReferences", []):
+            session.add(Source(
+                id=_new_id("source"),
+                company_id=company.id,
+                field_name=ref.get("field"),
+                source_url=ref.get("url"),
+            ))
+
         session.commit()
         log.info("company_saved", batch_id=batch_id, company_id=company.id, status=company.status)
     except IntegrityError as exc:
@@ -157,6 +186,16 @@ def get_company(company_id: str) -> dict | None:
         company = session.get(Company, company_id)
         if not company:
             return None
+
+        # missingFields/sourcesUsed aren't their own Company columns —
+        # pull them back out of the saved raw AI output if present.
+        missing_fields = []
+        sources_used = []
+        if company.enrichment_result and company.enrichment_result.raw_ai_output:
+            raw = company.enrichment_result.raw_ai_output
+            missing_fields = raw.get("missingFields", [])
+            sources_used = raw.get("sourcesUsed", [])
+
         return {
             "companyId": company.id,
             "batchId": company.batch_id,
@@ -167,8 +206,8 @@ def get_company(company_id: str) -> dict | None:
             "targetAudience": company.target_audience,
             "businessModel": company.business_model,
             "confidence": company.confidence,
-            "missingFields": company.missing_fields,
-            "sourcesUsed": company.sources_used,
+            "missingFields": missing_fields,
+            "sourcesUsed": sources_used,
             "status": company.status,
         }
     finally:
@@ -183,7 +222,9 @@ def mark_company_failed(batch_id: str, company, error_message: str) -> None:
     """
     session = SessionLocal()
     try:
+        company_id = _new_id("company")
         failed = Company(
+            id=company_id,
             batch_id=batch_id,
             company_name=getattr(company, "companyName", "unknown"),
             website_url=getattr(company, "websiteUrl", "unknown"),
@@ -192,8 +233,9 @@ def mark_company_failed(batch_id: str, company, error_message: str) -> None:
         )
         session.add(failed)
         session.add(ErrorLog(
+            id=_new_id("error"),
             batch_id=batch_id,
-            company_id=failed.id,
+            company_id=company_id,
             error_type="ProcessingError",
             message=error_message,
         ))
