@@ -1,98 +1,114 @@
 """
-Database Service — read/write functions used by every other service.
-Keeps raw SQL/ORM calls out of the service layer.
+Database Service (Repository) — Mission 8 / SCRUM-8, extended for
+Mission 11 / SCRUM-11's source-reference persistence.
+
+All read/write functions used by the rest of the app live here, so no
+other service touches SQLAlchemy directly.
+
+Note on schema: Company does not have missing_fields/sources_used
+columns — those live inside EnrichmentResult.raw_ai_output (the full
+profile dict is kept there for auditability), and get_company
+reconstructs them from there rather than from separate Company columns.
 """
 
 import uuid
-from urllib.parse import urlparse
 
-from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from src.core.errors import DatabaseSaveError
 from src.db.database import SessionLocal
 from src.db.models import Batch, Company, EnrichmentResult, ErrorLog, Source
+from src.core.errors import DatabaseSaveError, NotFoundError
+from src.core import logging as log
 
 
-def _normalize_domain(value: str | None) -> str | None:
-    """Return a lowercase domain without scheme, path, port, or www."""
-    if not value or not value.strip():
-        return None
-
-    candidate = value.strip().lower()
-    parsed = urlparse(candidate if "://" in candidate else f"//{candidate}")
-    domain = parsed.hostname or parsed.path.split("/")[0]
-
-    if not domain:
-        return None
-
-    return domain.removeprefix("www.")
+def _new_id(prefix: str) -> str:
+    return f"{prefix}_{uuid.uuid4().hex[:8]}"
 
 
-def _input_value(company, field_name: str, default=None):
-    if isinstance(company, dict):
-        return company.get(field_name, default)
-    return getattr(company, field_name, default)
-
-
-def create_batch(batch_id: str, status: str, validation) -> None:
-    """Persist a new enrichment batch and its validation counters."""
-    batch = Batch(
-        id=batch_id,
-        status=status,
-        total_received=validation.total_received,
-        valid_companies=len(validation.valid_companies),
-        invalid_companies=len(validation.invalid_companies),
-        duplicates=len(validation.duplicates),
-    )
-
+def create_batch(status: str, validation) -> str:
+    """
+    Creates the batch record with the counts from validation_service's
+    ValidationResult. The batch ID is generated here (models.py doesn't
+    auto-generate IDs) and returned so the caller can use it for
+    subsequent per-company processing. Duplicate/invalid companies are
+    also recorded as error entries, so they're visible in the errors
+    table too, not just the count.
+    """
+    session = SessionLocal()
     try:
-        with SessionLocal() as session:
-            session.add(batch)
-            session.commit()
+        batch_id = _new_id("batch")
+        batch = Batch(
+            id=batch_id,
+            status=status,
+            total_received=validation.total_received,
+            valid_companies=len(validation.valid_companies),
+            invalid_companies=len(validation.invalid_companies),
+            duplicates=len(validation.duplicates),
+        )
+        session.add(batch)
+
+        for invalid in validation.invalid_companies:
+            session.add(ErrorLog(
+                id=_new_id("error"),
+                batch_id=batch_id,
+                error_type="InvalidInputError",
+                message="; ".join(invalid["errors"]),
+            ))
+        for dup in validation.duplicates:
+            session.add(ErrorLog(
+                id=_new_id("error"),
+                batch_id=batch_id,
+                error_type="DuplicateCompanyError",
+                message=dup["reason"],
+            ))
+
+        session.commit()
+        log.info("batch_created", batch_id=batch_id, total=validation.total_received)
+        return batch_id
     except IntegrityError as exc:
-        raise DatabaseSaveError(f"batch already exists: {batch_id}") from exc
+        session.rollback()
+        log.error("database_save_failed", error=str(exc))
+        raise DatabaseSaveError(f"failed to create batch: {exc}") from exc
+    finally:
+        session.close()
 
 
 def finalize_batch(batch_id: str) -> None:
-    """Mark a batch completed, preserving whether company errors occurred."""
-    with SessionLocal() as session:
+    """
+    Sets the batch's final status based on its companies' outcomes:
+    Completed if all succeeded, Completed with Errors if some failed,
+    Failed if none succeeded.
+    """
+    session = SessionLocal()
+    try:
         batch = session.get(Batch, batch_id)
-        if batch is None:
-            return
+        if not batch:
+            raise NotFoundError(f"batch {batch_id} not found")
 
-        error_count = session.scalar(
-            select(func.count(ErrorLog.id)).where(ErrorLog.batch_id == batch_id)
-        ) or 0
+        companies = session.query(Company).filter(Company.batch_id == batch_id).all()
+        statuses = {c.status for c in companies}
 
-        failed_count = session.scalar(
-            select(func.count(Company.id)).where(
-                Company.batch_id == batch_id,
-                Company.status.in_(["Failed", "Partially Completed"]),
-            )
-        ) or 0
+        if not companies:
+            batch.status = "Completed"
+        elif statuses <= {"Completed"}:
+            batch.status = "Completed"
+        elif "Completed" in statuses or "Partially Completed" in statuses:
+            batch.status = "Completed with Errors"
+        else:
+            batch.status = "Failed"
 
-        batch.status = (
-            "Completed with Errors"
-            if error_count > 0 or failed_count > 0
-            else "Completed"
-        )
         session.commit()
+        log.info("batch_completed", batch_id=batch_id, status=batch.status)
+    finally:
+        session.close()
 
 
 def get_batch(batch_id: str) -> dict | None:
-    """Return a batch summary and the companies linked to it."""
-    with SessionLocal() as session:
+    session = SessionLocal()
+    try:
         batch = session.get(Batch, batch_id)
-        if batch is None:
+        if not batch:
             return None
-
-        companies = session.scalars(
-            select(Company)
-            .where(Company.batch_id == batch_id)
-            .order_by(Company.created_at, Company.id)
-        ).all()
-
         return {
             "batchId": batch.id,
             "status": batch.status,
@@ -100,193 +116,130 @@ def get_batch(batch_id: str) -> dict | None:
             "validCompanies": batch.valid_companies,
             "invalidCompanies": batch.invalid_companies,
             "duplicates": batch.duplicates,
-            "companies": [
-                {
-                    "companyId": company.id,
-                    "companyName": company.company_name,
-                    "domain": company.domain,
-                    "status": company.status,
-                }
-                for company in companies
-            ],
         }
+    finally:
+        session.close()
 
 
 def save_company(batch_id: str, profile: dict) -> None:
     """
-    Save the structured company profile, raw enrichment result, and sources.
-
-    A domain may appear only once within the same batch. Database constraints
-    provide a final safeguard in addition to validation-service checks.
+    Persists a company's final merged profile (post-enrichment, post-merge
+    with Agent 3's scan). The full profile dict — including missingFields
+    and sourcesUsed, which aren't their own Company columns — is kept in
+    EnrichmentResult.raw_ai_output for auditability and later retrieval.
+    Mission 11's source references (field -> URL) are persisted as
+    individual Source rows.
     """
-    company_id = profile.get("companyId") or f"company_{uuid.uuid4().hex[:8]}"
-    website_url = (
-        profile.get("websiteUrl")
-        or profile.get("normalizedWebsite")
-        or "unknown"
-    )
-    domain = _normalize_domain(profile.get("domain") or website_url)
-
+    session = SessionLocal()
     try:
-        with SessionLocal() as session:
-            if session.get(Batch, batch_id) is None:
-                raise DatabaseSaveError(f"batch not found: {batch_id}")
+        company_id = profile.get("companyId") or _new_id("company")
+        company = Company(
+            id=company_id,
+            batch_id=batch_id,
+            company_name=profile["companyName"],
+            website_url=profile.get("websiteUrl", profile.get("normalizedWebsite", "")),
+            domain=profile.get("domain"),
+            linkedin_url=profile.get("linkedinUrl"),
+            description=profile.get("description"),
+            industry=profile.get("industry"),
+            products_services=profile.get("productsServices", []),
+            target_audience=profile.get("targetAudience", []),
+            business_model=profile.get("businessModel"),
+            location=profile.get("location"),
+            company_size=profile.get("companySize"),
+            confidence=profile.get("confidence"),
+            status=profile.get("status", "Completed"),
+        )
+        session.add(company)
+        session.add(EnrichmentResult(
+            id=_new_id("result"),
+            company_id=company.id,
+            raw_ai_output=profile,
+        ))
 
-            if domain is not None:
-                duplicate = session.scalar(
-                    select(Company.id).where(
-                        Company.batch_id == batch_id,
-                        Company.domain == domain,
-                    )
-                )
-                if duplicate is not None:
-                    raise DatabaseSaveError(
-                        f"duplicate domain in batch {batch_id}: {domain}"
-                    )
+        # Mission 11: persist which URL backs which piece of confirmed
+        # website evidence, kept separate from the AI-generated fields.
+        for ref in profile.get("sourceReferences", []):
+            session.add(Source(
+                id=_new_id("source"),
+                company_id=company.id,
+                field_name=ref.get("field"),
+                source_url=ref.get("url"),
+            ))
 
-            company = Company(
-                id=company_id,
-                batch_id=batch_id,
-                company_name=profile.get("companyName") or "Unknown",
-                website_url=website_url,
-                domain=domain,
-                linkedin_url=profile.get("linkedinUrl"),
-                description=profile.get("description"),
-                industry=profile.get("industry"),
-                products_services=profile.get("productsServices") or [],
-                target_audience=profile.get("targetAudience") or [],
-                business_model=profile.get("businessModel"),
-                location=profile.get("location"),
-                company_size=profile.get("companySize"),
-                confidence=profile.get("confidence"),
-                status=profile.get("status") or "Completed",
-            )
-            session.add(company)
-            session.flush()
-
-            session.add(
-                EnrichmentResult(
-                    id=f"result_{uuid.uuid4().hex[:8]}",
-                    company_id=company_id,
-                    raw_ai_output=dict(profile),
-                )
-            )
-
-            seen_sources: set[str] = set()
-            for source_value in profile.get("sourcesUsed") or []:
-                source_text = str(source_value).strip()
-                if not source_text or source_text in seen_sources:
-                    continue
-                seen_sources.add(source_text)
-                session.add(
-                    Source(
-                        id=f"source_{uuid.uuid4().hex[:8]}",
-                        company_id=company_id,
-                        field_name="profile",
-                        source_url=source_text,
-                    )
-                )
-
-            session.commit()
-    except DatabaseSaveError:
-        raise
+        session.commit()
+        log.info("company_saved", batch_id=batch_id, company_id=company.id, status=company.status)
     except IntegrityError as exc:
-        raise DatabaseSaveError(
-            f"could not save company {company_id}"
-        ) from exc
+        session.rollback()
+        # Most likely the unique (batch_id, domain) constraint — a
+        # duplicate that slipped past validation. Log and re-raise so the
+        # caller can mark this one company failed without crashing the batch.
+        log.error("database_save_failed", batch_id=batch_id, error=str(exc))
+        raise DatabaseSaveError(f"failed to save company in batch {batch_id}: {exc}") from exc
+    finally:
+        session.close()
 
 
 def get_company(company_id: str) -> dict | None:
-    """Return one company in the API response format."""
-    with SessionLocal() as session:
+    session = SessionLocal()
+    try:
         company = session.get(Company, company_id)
-        if company is None:
+        if not company:
             return None
 
-        result = session.scalar(
-            select(EnrichmentResult).where(
-                EnrichmentResult.company_id == company_id
-            )
-        )
-        sources = session.scalars(
-            select(Source)
-            .where(Source.company_id == company_id)
-            .order_by(Source.extracted_at, Source.id)
-        ).all()
-
-        raw_profile = dict(result.raw_ai_output) if result else {}
+        # missingFields/sourcesUsed aren't their own Company columns —
+        # pull them back out of the saved raw AI output if present.
+        missing_fields = []
+        sources_used = []
+        if company.enrichment_result and company.enrichment_result.raw_ai_output:
+            raw = company.enrichment_result.raw_ai_output
+            missing_fields = raw.get("missingFields", [])
+            sources_used = raw.get("sourcesUsed", [])
 
         return {
             "companyId": company.id,
             "batchId": company.batch_id,
             "companyName": company.company_name,
-            "description": company.description or "unknown",
-            "industry": company.industry or "unknown",
-            "productsServices": company.products_services or [],
-            "targetAudience": company.target_audience or [],
-            "businessModel": company.business_model or "unknown",
-            "confidence": company.confidence or "unknown",
-            "missingFields": raw_profile.get("missingFields") or [],
-            "sourcesUsed": [source.source_url for source in sources],
+            "description": company.description,
+            "industry": company.industry,
+            "productsServices": company.products_services,
+            "targetAudience": company.target_audience,
+            "businessModel": company.business_model,
+            "confidence": company.confidence,
+            "missingFields": missing_fields,
+            "sourcesUsed": sources_used,
             "status": company.status,
         }
+    finally:
+        session.close()
 
 
 def mark_company_failed(batch_id: str, company, error_message: str) -> None:
-    """Persist a failed company and a linked error record."""
-    company_name = _input_value(company, "companyName", "Unknown") or "Unknown"
-    website_url = _input_value(company, "websiteUrl", "unknown") or "unknown"
-    linkedin_url = _input_value(company, "linkedinUrl")
-    domain = _normalize_domain(website_url)
-
+    """
+    Records a failed company without crashing the batch. `company` here is
+    the original validated input object (companyName, websiteUrl, ...),
+    since enrichment/merge never completed for it.
+    """
+    session = SessionLocal()
     try:
-        with SessionLocal() as session:
-            if session.get(Batch, batch_id) is None:
-                raise DatabaseSaveError(f"batch not found: {batch_id}")
-
-            existing_company_id = None
-            if domain is not None:
-                existing_company_id = session.scalar(
-                    select(Company.id).where(
-                        Company.batch_id == batch_id,
-                        Company.domain == domain,
-                    )
-                )
-
-            if existing_company_id is None:
-                company_id = f"company_{uuid.uuid4().hex[:8]}"
-                session.add(
-                    Company(
-                        id=company_id,
-                        batch_id=batch_id,
-                        company_name=company_name,
-                        website_url=website_url,
-                        domain=domain,
-                        linkedin_url=linkedin_url,
-                        products_services=[],
-                        target_audience=[],
-                        confidence="unknown",
-                        status="Failed",
-                    )
-                )
-                session.flush()
-            else:
-                company_id = existing_company_id
-
-            session.add(
-                ErrorLog(
-                    id=f"error_{uuid.uuid4().hex[:8]}",
-                    batch_id=batch_id,
-                    company_id=company_id,
-                    error_type="company_processing_failed",
-                    message=error_message,
-                    retry_count=0,
-                )
-            )
-            session.commit()
-    except DatabaseSaveError:
-        raise
-    except IntegrityError as exc:
-        raise DatabaseSaveError(
-            f"could not store company failure for batch {batch_id}"
-        ) from exc
+        company_id = _new_id("company")
+        failed = Company(
+            id=company_id,
+            batch_id=batch_id,
+            company_name=getattr(company, "companyName", "unknown"),
+            website_url=getattr(company, "websiteUrl", "unknown"),
+            linkedin_url=getattr(company, "linkedinUrl", None),
+            status="Failed",
+        )
+        session.add(failed)
+        session.add(ErrorLog(
+            id=_new_id("error"),
+            batch_id=batch_id,
+            company_id=company_id,
+            error_type="ProcessingError",
+            message=error_message,
+        ))
+        session.commit()
+        log.error("company_marked_failed", batch_id=batch_id, error=error_message)
+    finally:
+        session.close()

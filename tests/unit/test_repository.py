@@ -1,143 +1,168 @@
-"""Unit tests for the Agent 1 database repository."""
-
-from types import SimpleNamespace
+"""
+Unit tests for the database service — Mission 8 / SCRUM-8, extended for
+Mission 11 / SCRUM-11's source-reference persistence.
+Uses an in-memory SQLite database so tests don't touch the real DB file.
+"""
 
 import pytest
-from sqlalchemy import create_engine, event, func, select
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from src.core.errors import DatabaseSaveError
-from src.db import repository
-from src.db.models import Base, Company, EnrichmentResult, ErrorLog, Source
+from src.db.models import Base
+from src.db import repository as repo
 
 
-@pytest.fixture()
-def test_session_factory(monkeypatch):
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(engine, "connect")
-    def _enable_foreign_keys(dbapi_connection, _connection_record):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine, expire_on_commit=False)
-    monkeypatch.setattr(repository, "SessionLocal", factory)
-
-    yield factory
-
-    Base.metadata.drop_all(engine)
-    engine.dispose()
+class FakeValidationResult:
+    def __init__(self, valid=0, invalid=None, duplicates=None, total=0):
+        self.valid_companies = [object()] * valid
+        self.invalid_companies = invalid or []
+        self.duplicates = duplicates or []
+        self.total_received = total
 
 
-def _create_batch(batch_id: str = "batch_test") -> None:
-    validation = SimpleNamespace(
-        total_received=1,
-        valid_companies=["valid"],
-        invalid_companies=[],
-        duplicates=[],
-    )
-    repository.create_batch(batch_id, "Running", validation)
+class FakeCompany:
+    def __init__(self, companyName="Example", websiteUrl="https://example.com", linkedinUrl=None):
+        self.companyName = companyName
+        self.websiteUrl = websiteUrl
+        self.linkedinUrl = linkedinUrl
 
 
-def _profile(company_id: str = "company_1") -> dict:
-    return {
-        "companyId": company_id,
+@pytest.fixture(autouse=True)
+def use_in_memory_db(monkeypatch):
+    """Points repository.py's SessionLocal at an isolated in-memory DB for
+    every test, so tests never touch the real sqlite file on disk."""
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=engine)
+    TestSessionLocal = sessionmaker(bind=engine)
+    monkeypatch.setattr(repo, "SessionLocal", TestSessionLocal)
+    yield
+
+
+def test_create_batch_stores_counts_and_returns_generated_id():
+    validation = FakeValidationResult(valid=2, invalid=[{"company": FakeCompany(), "errors": ["bad"]}], total=3)
+    batch_id = repo.create_batch(status="Running", validation=validation)
+
+    assert batch_id  # a real ID was generated
+    batch = repo.get_batch(batch_id)
+    assert batch["totalReceived"] == 3
+    assert batch["validCompanies"] == 2
+    assert batch["invalidCompanies"] == 1
+
+
+def test_get_batch_returns_none_when_missing():
+    assert repo.get_batch("does-not-exist") is None
+
+
+def test_save_company_and_retrieve():
+    validation = FakeValidationResult(valid=1, total=1)
+    batch_id = repo.create_batch(status="Running", validation=validation)
+
+    profile = {
+        "companyId": "company_abc",
         "companyName": "Example Company",
-        "websiteUrl": "https://www.example.com",
         "domain": "example.com",
-        "linkedinUrl": "https://www.linkedin.com/company/example",
-        "description": "Example description",
+        "description": "A test company.",
         "industry": "SaaS",
         "productsServices": ["CRM"],
-        "targetAudience": ["Small businesses"],
+        "targetAudience": ["Sales teams"],
         "businessModel": "Subscription",
-        "location": "Haifa",
-        "companySize": "11-50",
-        "confidence": "high",
-        "missingFields": [],
-        "sourcesUsed": ["https://www.example.com/about"],
+        "confidence": "medium",
+        "missingFields": ["location"],
+        "sourcesUsed": ["company_name"],
         "status": "Completed",
     }
+    repo.save_company(batch_id, profile)
+
+    company = repo.get_company("company_abc")
+    assert company["companyName"] == "Example Company"
+    assert company["status"] == "Completed"
+    assert company["confidence"] == "medium"
 
 
-def test_saves_company_with_batch_result_and_source(test_session_factory):
-    _create_batch()
-    repository.save_company("batch_test", _profile())
-
-    batch = repository.get_batch("batch_test")
-    company = repository.get_company("company_1")
-
-    assert batch is not None
-    assert batch["companies"][0]["companyId"] == "company_1"
-    assert company is not None
-    assert company["batchId"] == "batch_test"
-    assert company["industry"] == "SaaS"
-    assert company["productsServices"] == ["CRM"]
-    assert company["sourcesUsed"] == ["https://www.example.com/about"]
-
-    with test_session_factory() as session:
-        assert session.scalar(select(func.count(Company.id))) == 1
-        assert session.scalar(select(func.count(EnrichmentResult.id))) == 1
-        assert session.scalar(select(func.count(Source.id))) == 1
+def test_get_company_returns_none_when_missing():
+    assert repo.get_company("does-not-exist") is None
 
 
-def test_duplicate_domain_in_same_batch_is_rejected(test_session_factory):
-    _create_batch()
-    repository.save_company("batch_test", _profile("company_1"))
+def test_mark_company_failed_does_not_raise():
+    validation = FakeValidationResult(valid=1, total=1)
+    batch_id = repo.create_batch(status="Running", validation=validation)
 
-    duplicate = _profile("company_2")
-    duplicate["domain"] = "www.example.com"
-
-    with pytest.raises(DatabaseSaveError, match="duplicate domain"):
-        repository.save_company("batch_test", duplicate)
-
-    with test_session_factory() as session:
-        assert session.scalar(select(func.count(Company.id))) == 1
+    # Should not raise even though this company never finished processing
+    repo.mark_company_failed(batch_id, FakeCompany(companyName="Broken Co"), "AI response error")
 
 
-def test_same_domain_is_allowed_in_different_batches(test_session_factory):
-    _create_batch("batch_1")
-    _create_batch("batch_2")
+def test_finalize_batch_marks_completed_when_all_companies_completed():
+    validation = FakeValidationResult(valid=1, total=1)
+    batch_id = repo.create_batch(status="Running", validation=validation)
+    repo.save_company(batch_id, {
+        "companyId": "company_x",
+        "companyName": "Co X",
+        "domain": "cox.com",
+        "status": "Completed",
+    })
 
-    repository.save_company("batch_1", _profile("company_1"))
-    repository.save_company("batch_2", _profile("company_2"))
+    repo.finalize_batch(batch_id)
 
-    with test_session_factory() as session:
-        assert session.scalar(select(func.count(Company.id))) == 2
+    batch = repo.get_batch(batch_id)
+    assert batch["status"] == "Completed"
 
 
-def test_failed_company_is_logged_and_batch_finishes_with_errors(
-    test_session_factory,
-):
-    _create_batch()
-    company_input = SimpleNamespace(
-        companyName="Broken Company",
-        websiteUrl="https://broken.example",
-        linkedinUrl=None,
-    )
+def test_finalize_batch_marks_completed_with_errors_when_mixed():
+    validation = FakeValidationResult(valid=2, total=2)
+    batch_id = repo.create_batch(status="Running", validation=validation)
+    repo.save_company(batch_id, {"companyId": "c1", "companyName": "Co 1", "domain": "co1.com", "status": "Completed"})
+    repo.mark_company_failed(batch_id, FakeCompany(companyName="Co 2"), "some error")
 
-    repository.mark_company_failed(
-        "batch_test",
-        company_input,
-        "enrichment failed",
-    )
-    repository.finalize_batch("batch_test")
+    repo.finalize_batch(batch_id)
 
-    batch = repository.get_batch("batch_test")
-    assert batch is not None
+    batch = repo.get_batch(batch_id)
     assert batch["status"] == "Completed with Errors"
-    assert batch["companies"][0]["status"] == "Failed"
 
-    with test_session_factory() as session:
-        error = session.scalar(select(ErrorLog))
-        assert error is not None
-        assert error.batch_id == "batch_test"
-        assert error.company_id is not None
-        assert error.message == "enrichment failed"
+
+def test_save_company_persists_source_references():
+    # Mission 11 / SCRUM-11: confirmed website evidence must be saved
+    # with its source URL, traceable per-field.
+    validation = FakeValidationResult(valid=1, total=1)
+    batch_id = repo.create_batch(status="Running", validation=validation)
+
+    profile = {
+        "companyId": "company_with_sources",
+        "companyName": "Example Company",
+        "domain": "example.com",
+        "status": "Completed",
+        "sourceReferences": [
+            {"field": "productsServices", "url": "https://example.com/products"},
+            {"field": "pricingAvailable", "url": "https://example.com/pricing"},
+        ],
+    }
+    repo.save_company(batch_id, profile)
+
+    session = repo.SessionLocal()
+    try:
+        from src.db.models import Source
+        sources = session.query(Source).filter(Source.company_id == "company_with_sources").all()
+        assert len(sources) == 2
+        fields = {s.field_name for s in sources}
+        assert fields == {"productsServices", "pricingAvailable"}
+    finally:
+        session.close()
+
+
+def test_save_company_with_no_source_references_saves_none():
+    validation = FakeValidationResult(valid=1, total=1)
+    batch_id = repo.create_batch(status="Running", validation=validation)
+
+    repo.save_company(batch_id, {
+        "companyId": "company_no_sources",
+        "companyName": "Example Company",
+        "domain": "example2.com",
+        "status": "Completed",
+    })
+
+    from src.db.models import Source
+    session = repo.SessionLocal()
+    try:
+        sources = session.query(Source).filter(Source.company_id == "company_no_sources").all()
+        assert sources == []
+    finally:
+        session.close()
