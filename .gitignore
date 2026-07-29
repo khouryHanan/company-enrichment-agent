@@ -10,3 +10,4 @@ agent1.db
 
 # macOS
 .DS_Store
+.env
