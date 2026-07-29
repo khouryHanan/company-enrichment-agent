@@ -29,3 +29,7 @@ class Agent3IntegrationError(Agent1Error):
 
 class DatabaseSaveError(Agent1Error):
     """Temporary — may be retried with backoff."""
+
+
+class NotFoundError(Agent1Error):
+    """Raised when a requested batch or company doesn't exist."""
