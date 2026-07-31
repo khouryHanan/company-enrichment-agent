@@ -22,8 +22,12 @@ from pydantic import BaseModel, Field
 from src.core.config import settings
 from src.core import logging as log
 from src.core.errors import AIResponseError
+from src.core.retry import retry
 
 MAX_RETRIES = 1  # one retry on invalid/malformed output, then fail per Mission 13
+# Intentionally lower than the general settings.MAX_RETRIES default (3):
+# a model that returns malformed output once is quite likely to do so
+# again, so we fail fast here rather than burning the full retry budget.
 
 
 class CompanyProfile(BaseModel):
@@ -113,32 +117,24 @@ def enrich_company(company, normalized: dict) -> dict:
     prompt = build_prompt(company, normalized)
     company_id = f"company_{uuid.uuid4().hex[:8]}"
 
-    last_error = None
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            profile: CompanyProfile = _call_model(prompt)
-            return {
-                "companyId": company_id,
-                "companyName": profile.companyName,
-                "description": profile.description,
-                "industry": profile.industry,
-                "productsServices": profile.productsServices,
-                "targetAudience": profile.targetAudience,
-                "businessModel": profile.businessModel,
-                "confidence": profile.confidence,
-                "missingFields": profile.missingFields,
-                "sourcesUsed": profile.sourcesUsed,
-                "status": "Completed",
-            }
-        except AIResponseError as exc:
-            last_error = exc
-            log.error(
-                "ai_output_parsing_failed",
-                company_id=company_id,
-                attempt=attempt + 1,
-                error=str(exc),
-            )
+    profile: CompanyProfile = retry(
+        _call_model,
+        prompt,
+        retryable_exceptions=(AIResponseError,),
+        max_retries=MAX_RETRIES,
+        event_name="ai_output_parsing",
+    )
 
-    # All retries exhausted — raise so batch_service marks this company
-    # Failed and moves on to the next one, per Mission 13.
-    raise last_error
+    return {
+        "companyId": company_id,
+        "companyName": profile.companyName,
+        "description": profile.description,
+        "industry": profile.industry,
+        "productsServices": profile.productsServices,
+        "targetAudience": profile.targetAudience,
+        "businessModel": profile.businessModel,
+        "confidence": profile.confidence,
+        "missingFields": profile.missingFields,
+        "sourcesUsed": profile.sourcesUsed,
+        "status": "Completed",
+    }

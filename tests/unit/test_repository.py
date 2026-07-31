@@ -5,7 +5,9 @@ Uses an in-memory SQLite database so tests don't touch the real DB file.
 """
 
 import pytest
+from unittest.mock import patch, MagicMock
 from sqlalchemy import create_engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 
 from src.db.models import Base
@@ -166,3 +168,30 @@ def test_save_company_with_no_source_references_saves_none():
         assert sources == []
     finally:
         session.close()
+
+
+@patch("src.core.retry.time.sleep")  # skip real backoff delay in tests
+def test_save_company_retries_then_raises_on_persistent_operational_error(mock_sleep, monkeypatch):
+    # Mission 13: a transient DB failure (e.g. SQLite "database is locked")
+    # should be retried, not fail on the first attempt. If it never
+    # recovers, it should surface as a clean DatabaseSaveError, not a
+    # raw SQLAlchemy exception leaking out of the repository layer.
+    validation = FakeValidationResult(valid=1, total=1)
+    batch_id = repo.create_batch(status="Running", validation=validation)
+
+    real_session = repo.SessionLocal()
+    always_fails_commit = MagicMock(side_effect=OperationalError("stmt", {}, Exception("db is locked")))
+    monkeypatch.setattr(real_session, "commit", always_fails_commit)
+    monkeypatch.setattr(repo, "SessionLocal", lambda: real_session)
+
+    from src.core.errors import DatabaseSaveError
+    with pytest.raises(DatabaseSaveError):
+        repo.save_company(batch_id, {
+            "companyId": "company_retry_test",
+            "companyName": "Example Company",
+            "domain": "retrytest.com",
+            "status": "Completed",
+        })
+
+    # Confirms it actually retried (didn't give up after one attempt).
+    assert always_fails_commit.call_count > 1

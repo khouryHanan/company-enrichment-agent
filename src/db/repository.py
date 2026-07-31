@@ -13,12 +13,13 @@ reconstructs them from there rather than from separate Company columns.
 
 import uuid
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from src.db.database import SessionLocal
 from src.db.models import Batch, Company, EnrichmentResult, ErrorLog, Source
 from src.core.errors import DatabaseSaveError, NotFoundError
 from src.core import logging as log
+from src.core.retry import retry
 
 
 def _new_id(prefix: str) -> str:
@@ -62,13 +63,17 @@ def create_batch(status: str, validation) -> str:
                 message=dup["reason"],
             ))
 
-        session.commit()
+        retry(session.commit, retryable_exceptions=(OperationalError,), event_name="create_batch_commit")
         log.info("batch_created", batch_id=batch_id, total=validation.total_received)
         return batch_id
     except IntegrityError as exc:
         session.rollback()
         log.error("database_save_failed", error=str(exc))
         raise DatabaseSaveError(f"failed to create batch: {exc}") from exc
+    except OperationalError as exc:
+        session.rollback()
+        log.error("database_save_failed", error=str(exc))
+        raise DatabaseSaveError(f"failed to create batch after retries: {exc}") from exc
     finally:
         session.close()
 
@@ -167,15 +172,21 @@ def save_company(batch_id: str, profile: dict) -> None:
                 source_url=ref.get("url"),
             ))
 
-        session.commit()
+        retry(session.commit, retryable_exceptions=(OperationalError,), event_name="save_company_commit")
         log.info("company_saved", batch_id=batch_id, company_id=company.id, status=company.status)
     except IntegrityError as exc:
         session.rollback()
         # Most likely the unique (batch_id, domain) constraint — a
-        # duplicate that slipped past validation. Log and re-raise so the
-        # caller can mark this one company failed without crashing the batch.
+        # duplicate that slipped past validation. Permanent — not
+        # retried, since retrying an identical insert fails identically.
         log.error("database_save_failed", batch_id=batch_id, error=str(exc))
         raise DatabaseSaveError(f"failed to save company in batch {batch_id}: {exc}") from exc
+    except OperationalError as exc:
+        session.rollback()
+        # Transient (e.g. SQLite "database is locked") — already retried
+        # by retry() above; this is the final failure after all attempts.
+        log.error("database_save_failed", batch_id=batch_id, error=str(exc))
+        raise DatabaseSaveError(f"failed to save company in batch {batch_id} after retries: {exc}") from exc
     finally:
         session.close()
 
