@@ -46,6 +46,9 @@ Visit `http://localhost:8000/health` to confirm it's running.
 pytest
 ```
 
+Coverage of the required SCRUM-15 scenarios and the latest results are
+documented in [`docs/test-results.md`](docs/test-results.md).
+
 ## Branches
 
 Each folder above maps to a feature branch per Mission 2:
