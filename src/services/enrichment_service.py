@@ -117,6 +117,8 @@ def enrich_company(company, normalized: dict) -> dict:
     prompt = build_prompt(company, normalized)
     company_id = f"company_{uuid.uuid4().hex[:8]}"
 
+    log.info("enrichment_started", company_id=company_id, company_name=company.companyName)
+
     profile: CompanyProfile = retry(
         _call_model,
         prompt,
@@ -124,6 +126,8 @@ def enrich_company(company, normalized: dict) -> dict:
         max_retries=MAX_RETRIES,
         event_name="ai_output_parsing",
     )
+
+    log.info("enrichment_completed", company_id=company_id, confidence=profile.confidence)
 
     return {
         "companyId": company_id,

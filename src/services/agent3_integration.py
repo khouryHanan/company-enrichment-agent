@@ -60,6 +60,8 @@ def trigger_scan(company_id: str, website_url: str) -> dict:
     url = f"{settings.AGENT3_BASE_URL}{SCAN_ENDPOINT}"
     payload = {"companyId": company_id, "websiteUrl": website_url}
 
+    log.info("agent3_scan_triggered", company_id=company_id, url=url)
+
     try:
         response = retry(
             _do_request,
