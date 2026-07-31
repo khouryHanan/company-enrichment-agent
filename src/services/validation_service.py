@@ -9,6 +9,8 @@ Invalid companies must not stop the batch.
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+from src.core import logging as log
+
 
 @dataclass
 class ValidationResult:
@@ -19,6 +21,11 @@ class ValidationResult:
 
 
 def validate_companies(companies: list) -> ValidationResult:
+    # Validation runs before the batch record exists, so these logs carry
+    # company names instead of a batch_id; batch_service logs the batch_id
+    # against the same counts right after via batch_started.
+    log.info("validation_started", total=len(companies))
+
     valid_companies = []
     invalid_companies = []
     duplicates = []
@@ -33,6 +40,8 @@ def validate_companies(companies: list) -> ValidationResult:
         website_url = company.websiteUrl
         linkedin_url = company.linkedinUrl
 
+        log.info("company_validation_started", company_name=company_name or "unknown")
+
         if not company_name or not company_name.strip():
             errors.append("Company name is required")
 
@@ -43,6 +52,7 @@ def validate_companies(companies: list) -> ValidationResult:
             errors.append("Invalid LinkedIn URL")
 
         if errors:
+            log.error("company_validation_failed", company_name=company_name or "unknown", errors="; ".join(errors))
             invalid_companies.append({
                 "company": company,
                 "errors": errors
@@ -53,6 +63,7 @@ def validate_companies(companies: list) -> ValidationResult:
         domain = extract_domain(website_url)
 
         if normalized_name in seen_names or domain in seen_domains:
+            log.info("company_duplicate_skipped", company_name=company_name, domain=domain)
             duplicates.append({
                 "company": company,
                 "reason": "Duplicate company name or domain"
@@ -62,6 +73,13 @@ def validate_companies(companies: list) -> ValidationResult:
         seen_names.add(normalized_name)
         seen_domains.add(domain)
         valid_companies.append(company)
+
+    log.info(
+        "validation_completed",
+        valid=len(valid_companies),
+        invalid=len(invalid_companies),
+        duplicates=len(duplicates),
+    )
 
     return ValidationResult(
         valid_companies=valid_companies,
