@@ -8,9 +8,19 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from src.api.routes import router
+from src.db.database import init_db
 
 app = FastAPI(title="Agent 1 — Bulk Company Enrichment Agent")
 app.include_router(router)
+
+
+@app.on_event("startup")
+def create_tables() -> None:
+    # Idempotent — creates only tables that don't exist yet. Without
+    # this the app only works if agent1.db already has tables (it's
+    # gitignored, so fresh clones and deleted DBs crashed with
+    # "no such table: batches").
+    init_db()
 
 
 @app.exception_handler(RequestValidationError)
