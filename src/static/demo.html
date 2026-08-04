@@ -231,11 +231,18 @@ async function submitBatch() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ companies }),
     });
-    const data = await res.json();
+    // Read as text first: an unexpected server failure may not be JSON,
+    // and a parse error would otherwise hide the real reason.
+    const raw = await res.text();
+    let data;
+    try { data = JSON.parse(raw); } catch { data = null; }
     if (!res.ok) {
-      const detail = (data.errors || []).map(e => `${e.field}: ${e.message}`).join("; ") || data.detail || res.status;
+      const detail = data
+        ? ((data.errors || []).map(e => `${e.field}: ${e.message}`).join("; ") || data.detail || res.status)
+        : `HTTP ${res.status} — ${raw.slice(0, 200)}`;
       throw new Error(detail);
     }
+    if (!data) throw new Error("Server returned an unreadable response.");
     renderSummary(data);
     const list = await (await fetch(`/api/agents/agent1/bulk-enrichment/${data.batchId}/companies`)).json();
     renderCompanies(list.companies || []);

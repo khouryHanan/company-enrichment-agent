@@ -10,6 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 
 from src.api.routes import router
+from src.core import logging as log
 from src.db.database import init_db
 
 app = FastAPI(title="Agent 1 — Bulk Company Enrichment Agent")
@@ -39,6 +40,20 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
         content={"detail": "Invalid request", "errors": errors},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """
+    Returns JSON for unexpected failures instead of Starlette's plain-text
+    "Internal Server Error", so API clients — including the demo UI — can
+    parse and display the reason rather than choking on the body.
+    """
+    log.error("unhandled_request_error", path=request.url.path, error=str(exc))
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": f"{type(exc).__name__}: {exc}"},
     )
 
 

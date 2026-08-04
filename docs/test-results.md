@@ -1,6 +1,6 @@
 # Test Results — Agent 1 (SCRUM-15)
 
-Latest full run: **2026-08-04** on `main` — **102 passed, 0 failed** (1 deprecation
+Latest full run: **2026-08-04** on `main` — **103 passed, 0 failed** (1 deprecation
 warning from Starlette's test client, unrelated to our code).
 
 ```bash
@@ -24,8 +24,8 @@ pytest -v       # per-test detail
 | `tests/integration/test_batch_flow.py` | 2 | Full pipeline, batch summary counts |
 | `tests/api/test_bulk_input.py` | 9 | POST input validation |
 | `tests/api/test_get_endpoints.py` | 7 | GET status/result endpoints |
-| `tests/api/test_routes.py` | 3 | Health check, error responses |
-| **Total** | **102** | |
+| `tests/api/test_routes.py` | 4 | Health check, error responses |
+| **Total** | **103** | |
 
 ## Required scenarios (SCRUM-15) → tests
 

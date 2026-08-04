@@ -8,7 +8,10 @@ records, and failure handling.
 ## Before the demo
 
 - [ ] `.env` exists with a working AI key (`AI_MODEL=google_genai:gemini-flash-latest` — see `.env.example`)
-- [ ] Fresh database for clean numbers: `rm -f agent1.db` (recreated automatically)
+- [ ] Fresh database for clean numbers: `rm -f agent1.db` — **do this before
+      starting the servers** (tables are created once at startup, so deleting
+      the file while the API is running leaves it with no tables and every
+      request fails; if you delete it later, restart the API)
 - [ ] Three terminals ready, venv activated in each (`source venv/bin/activate`)
 - [ ] Browser tabs open: the Jira board (Epic SCRUM-1) and the GitHub repo's closed PRs
 
