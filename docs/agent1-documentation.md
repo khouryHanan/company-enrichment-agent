@@ -42,6 +42,10 @@ profile it already has; merge failure → same fallback.
 
 Orchestration lives in `src/services/batch_service.py`; each stage is
 its own module under `src/services/` (see the README for the layout).
+The API layer (`src/api/routes.py`) only translates HTTP — it parses the
+request, calls a service, and maps a missing result to a 404. It never
+reaches into the database or other agents directly, so where data lives
+and how it is assembled can change without touching the endpoints.
 
 ## 3. Setup and running locally
 
@@ -100,8 +104,11 @@ Full JSON examples for every endpoint and error case:
 |---|---|---|
 | `POST` | `/api/agents/agent1/bulk-enrichment` | Submit a batch; returns the batch summary |
 | `GET` | `/api/agents/agent1/bulk-enrichment/{batchId}` | Batch status + counts |
+| `GET` | `/api/agents/agent1/bulk-enrichment/{batchId}/companies` | Every company result in a batch, enriched and failed alike |
 | `GET` | `/api/companies/{companyId}` | One company's enriched profile |
+| `GET` | `/api/agents/agent1/agent3-health` | Whether the Agent 3 scanner is reachable |
 | `GET` | `/health` | Liveness check |
+| `GET` | `/demo` | Client-facing demo UI (SCRUM-18) |
 
 ## 6. Database schema
 

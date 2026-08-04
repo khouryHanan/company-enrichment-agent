@@ -26,7 +26,7 @@ def test_bulk_enrichment_rejects_empty_list():
 # the real database file, so it failed on any fresh checkout with no
 # agent1.db (tables are created at app startup, which TestClient does
 # not trigger without a `with` block).
-@patch("src.api.routes.repository.get_batch")
+@patch("src.api.routes.batch_service.get_batch_summary")
 def test_get_batch_status_not_found(mock_get_batch):
     mock_get_batch.return_value = None
     response = client.get("/api/agents/agent1/bulk-enrichment/does-not-exist")

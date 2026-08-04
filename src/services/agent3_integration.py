@@ -29,6 +29,9 @@ from src.core.retry import retry
 
 SCAN_ENDPOINT = "/api/agents/agent3/scan"
 TIMEOUT_SECONDS = 10.0
+# Status probes must answer fast — a UI indicator should never hang
+# on a scanner that is simply down.
+PROBE_TIMEOUT_SECONDS = 1.0
 
 # Temporary — worth retrying: network hiccups and server-side errors.
 _RETRYABLE_EXCEPTIONS = (httpx.TimeoutException, httpx.ConnectError)
@@ -105,3 +108,18 @@ def trigger_scan(company_id: str, website_url: str) -> dict:
 
     log.info("agent3_scan_completed", company_id=company_id, scan_status=data["scanStatus"])
     return data
+
+
+def is_reachable() -> bool:
+    """
+    Connectivity probe used by status indicators (the demo UI's scanner
+    dot). Any HTTP response means Agent 3 is up — only a transport-level
+    failure counts as down, since a 404 on the base URL still proves
+    something is listening. Lives here so the base URL, client, and
+    timeouts stay owned by this module.
+    """
+    try:
+        httpx.get(settings.AGENT3_BASE_URL, timeout=PROBE_TIMEOUT_SECONDS)
+        return True
+    except httpx.HTTPError:
+        return False

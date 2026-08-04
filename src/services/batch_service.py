@@ -90,3 +90,32 @@ def _process_company(batch_id: str, company) -> None:
     except Exception as exc:
         log.error("database_save_failed", batch_id=batch_id, error=str(exc))
         repository.mark_company_failed(batch_id, company, f"database save failed: {exc}")
+
+
+# --- Read side -------------------------------------------------------
+# Query paths behind the API's GET endpoints. They live here so the API
+# layer never reaches into the database itself: a route's only job is to
+# turn a missing result into a 404 and shape the HTTP response.
+
+
+def get_batch_summary(batch_id: str) -> dict | None:
+    """The batch record and its counts, or None if no such batch."""
+    return repository.get_batch(batch_id)
+
+
+def get_batch_companies(batch_id: str) -> list[dict] | None:
+    """
+    Every company recorded for a batch — enriched and failed alike — or
+    None when the batch itself does not exist. The distinction matters:
+    None means "no such batch" (404), while an empty list means a real
+    batch that produced no company rows. Keeping that judgement here
+    means every caller answers an unknown batch the same way.
+    """
+    if repository.get_batch(batch_id) is None:
+        return None
+    return repository.get_companies_for_batch(batch_id)
+
+
+def get_company_profile(company_id: str) -> dict | None:
+    """A single company's final merged profile, or None if not found."""
+    return repository.get_company(company_id)

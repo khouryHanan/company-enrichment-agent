@@ -39,7 +39,7 @@ FAKE_COMPANY = {
 }
 
 
-@patch("src.api.routes.repository.get_batch")
+@patch("src.api.routes.batch_service.get_batch_summary")
 def test_get_batch_status_returns_batch_when_found(mock_get_batch):
     mock_get_batch.return_value = FAKE_BATCH
 
@@ -50,7 +50,7 @@ def test_get_batch_status_returns_batch_when_found(mock_get_batch):
     assert response.json()["status"] == "Completed"
 
 
-@patch("src.api.routes.repository.get_batch")
+@patch("src.api.routes.batch_service.get_batch_summary")
 def test_get_batch_status_returns_404_when_not_found(mock_get_batch):
     mock_get_batch.return_value = None
 
@@ -60,7 +60,7 @@ def test_get_batch_status_returns_404_when_not_found(mock_get_batch):
     assert "not found" in response.json()["detail"].lower()
 
 
-@patch("src.api.routes.repository.get_company")
+@patch("src.api.routes.batch_service.get_company_profile")
 def test_get_company_result_returns_company_when_found(mock_get_company):
     mock_get_company.return_value = FAKE_COMPANY
 
@@ -73,7 +73,7 @@ def test_get_company_result_returns_company_when_found(mock_get_company):
     assert body["productsServices"] == ["CRM", "Workflow automation"]
 
 
-@patch("src.api.routes.repository.get_company")
+@patch("src.api.routes.batch_service.get_company_profile")
 def test_get_company_result_returns_404_when_not_found(mock_get_company):
     mock_get_company.return_value = None
 
@@ -83,7 +83,7 @@ def test_get_company_result_returns_404_when_not_found(mock_get_company):
     assert "not found" in response.json()["detail"].lower()
 
 
-@patch("src.api.routes.repository.get_company")
+@patch("src.api.routes.batch_service.get_company_profile")
 def test_get_company_result_matches_response_schema(mock_get_company):
     # Confirms every field CompanyEnrichmentResult requires is actually
     # present in what the endpoint returns — catches schema drift early.
@@ -99,10 +99,9 @@ def test_get_company_result_matches_response_schema(mock_get_company):
     }
     assert required_fields.issubset(body.keys())
 
-@patch("src.api.routes.repository.get_companies_for_batch")
-@patch("src.api.routes.repository.get_batch")
-def test_get_batch_companies_returns_all_companies(mock_get_batch, mock_get_companies):
-    mock_get_batch.return_value = FAKE_BATCH
+
+@patch("src.api.routes.batch_service.get_batch_companies")
+def test_get_batch_companies_returns_all_companies(mock_get_companies):
     mock_get_companies.return_value = [dict(FAKE_COMPANY), dict(FAKE_COMPANY, companyId="company_2", status="Failed")]
 
     response = client.get("/api/agents/agent1/bulk-enrichment/batch_abc123/companies")
@@ -114,9 +113,9 @@ def test_get_batch_companies_returns_all_companies(mock_get_batch, mock_get_comp
     assert body["companies"][1]["status"] == "Failed"
 
 
-@patch("src.api.routes.repository.get_batch")
-def test_get_batch_companies_404_when_batch_missing(mock_get_batch):
-    mock_get_batch.return_value = None
+@patch("src.api.routes.batch_service.get_batch_companies")
+def test_get_batch_companies_404_when_batch_missing(mock_get_companies):
+    mock_get_companies.return_value = None  # None = no such batch
 
     response = client.get("/api/agents/agent1/bulk-enrichment/nope/companies")
 

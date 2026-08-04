@@ -130,3 +130,18 @@ def test_trigger_scan_raises_on_missing_scan_status_field(mock_post):
 
     with pytest.raises(Agent3IntegrationError):
         agent3_integration.trigger_scan("company_123", "https://example.com")
+
+@patch("src.services.agent3_integration.httpx.get")
+def test_is_reachable_true_when_any_response_comes_back(mock_get):
+    # Even a 404 on the base URL proves something is listening — only a
+    # transport-level failure means the scanner is down.
+    mock_get.return_value = MagicMock(status_code=404)
+
+    assert agent3_integration.is_reachable() is True
+
+
+@patch("src.services.agent3_integration.httpx.get")
+def test_is_reachable_false_on_connection_error(mock_get):
+    mock_get.side_effect = httpx.ConnectError("refused")
+
+    assert agent3_integration.is_reachable() is False

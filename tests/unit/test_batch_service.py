@@ -150,3 +150,46 @@ def test_batch_summary_can_be_retrieved(mock_validation, mock_repo):
 
     mock_repo.get_batch.assert_called_with("batch_retrieve_me")
     assert result["status"] == "Completed"
+
+
+# --- Read side (query paths behind the GET endpoints) ---------------
+
+
+@patch("src.services.batch_service.repository")
+def test_get_batch_summary_returns_repository_result(mock_repo):
+    mock_repo.get_batch.return_value = {"batchId": "batch_1", "status": "Completed"}
+
+    assert batch_service.get_batch_summary("batch_1")["status"] == "Completed"
+
+
+@patch("src.services.batch_service.repository")
+def test_get_batch_companies_returns_none_for_unknown_batch(mock_repo):
+    # None (not []) so callers can tell "no such batch" from "a batch
+    # that recorded no companies" — the API turns None into a 404.
+    mock_repo.get_batch.return_value = None
+
+    assert batch_service.get_batch_companies("nope") is None
+    mock_repo.get_companies_for_batch.assert_not_called()
+
+
+@patch("src.services.batch_service.repository")
+def test_get_batch_companies_returns_empty_list_for_batch_with_no_companies(mock_repo):
+    mock_repo.get_batch.return_value = {"batchId": "batch_1"}
+    mock_repo.get_companies_for_batch.return_value = []
+
+    assert batch_service.get_batch_companies("batch_1") == []
+
+
+@patch("src.services.batch_service.repository")
+def test_get_batch_companies_returns_all_recorded_companies(mock_repo):
+    mock_repo.get_batch.return_value = {"batchId": "batch_1"}
+    mock_repo.get_companies_for_batch.return_value = [{"companyId": "c1"}, {"companyId": "c2"}]
+
+    assert len(batch_service.get_batch_companies("batch_1")) == 2
+
+
+@patch("src.services.batch_service.repository")
+def test_get_company_profile_returns_none_when_missing(mock_repo):
+    mock_repo.get_company.return_value = None
+
+    assert batch_service.get_company_profile("nope") is None
