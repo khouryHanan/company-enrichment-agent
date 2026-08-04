@@ -7,14 +7,21 @@ Cleans and standardizes website and LinkedIn URLs into a consistent format.
 from .validation_service import extract_domain
 
 
-def normalize_website_url(raw_url: str) -> dict:
+def normalize_website_url(raw_url: str | None) -> dict | None:
     """
-    Returns: {"normalizedWebsite": str, "domain": str}
+    Normalize a website URL and extract its domain.
 
-    Cleans whitespace, removes trailing slashes,
-    and extracts the website domain.
+    Returns:
+        {"normalizedWebsite": str, "domain": str}
+        or None when the input is empty.
     """
+    if raw_url is None:
+        return None
+
     normalized_url = raw_url.strip().rstrip("/")
+
+    if not normalized_url:
+        return None
 
     return {
         "normalizedWebsite": normalized_url,
@@ -24,7 +31,8 @@ def normalize_website_url(raw_url: str) -> dict:
 
 def normalize_linkedin_url(raw_url: str | None) -> str | None:
     """
-    Returns a cleaned LinkedIn company URL, or None if input was empty.
+    Return a cleaned LinkedIn company URL,
+    or None when the input is empty.
     """
     if raw_url is None:
         return None
