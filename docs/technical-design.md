@@ -1,7 +1,7 @@
 # Agent 1 — Technical Design Document
 ### Bulk Company Enrichment Agent
 
-**Status:** Draft — pending PM/instructor approval
+**Status:** Implemented — kept as the original design reference; see [`agent1-documentation.md`](agent1-documentation.md) for as-built documentation
 **Owner:** Team Lead
 **Related Jira Epic:** SCRUM-1
 

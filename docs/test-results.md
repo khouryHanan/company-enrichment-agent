@@ -1,6 +1,6 @@
 # Test Results — Agent 1 (SCRUM-15)
 
-Latest full run: **2026-07-31** on `feature/agent1-normalization-clean` — **94 passed, 0 failed** (1 deprecation
+Latest full run: **2026-08-04** on `main` — **94 passed, 0 failed** (1 deprecation
 warning from Starlette's test client, unrelated to our code).
 
 ```bash

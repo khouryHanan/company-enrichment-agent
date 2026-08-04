@@ -4,9 +4,10 @@ Receives a bulk list of companies, validates and normalizes the data,
 enriches each profile using AI, triggers Agent 3 for website scanning,
 merges the results, persists everything, and exposes it via API.
 
-See [`docs/technical-design.md`](docs/technical-design.md) for the full
-architecture, input/output formats, database schema, and error handling
-design.
+Start with [`docs/agent1-documentation.md`](docs/agent1-documentation.md)
+— the full technical documentation (architecture, setup, API, database
+schema, prompt design, error handling, testing, known limitations). The
+original design document is [`docs/technical-design.md`](docs/technical-design.md).
 
 ## Project structure
 
