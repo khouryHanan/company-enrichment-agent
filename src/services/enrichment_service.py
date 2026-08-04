@@ -54,17 +54,22 @@ produce a factual, structured company profile using ONLY the company name, \
 website, domain, and LinkedIn URL provided in the user message.
 
 Rules you must follow:
-- Do not invent, assume, or infer information you cannot support from the \
-given context. If you do not have enough information for a field, set that \
-field's value to "unknown" (for single strings) or "not_available" (where \
-"not_available" reads more naturally, e.g. for a business model).
-- Do not use outside knowledge about companies with similar names unless the \
-provided domain or LinkedIn URL confirms it is the same company.
+- If the provided domain or LinkedIn URL clearly identifies a company you \
+know (for example, github.com is GitHub), use your knowledge of that company \
+to fill the profile as fully as you can.
+- Never guess about a company you cannot confidently identify from the \
+provided domain or LinkedIn URL — a similar name alone is not identification. \
+For those, set fields you cannot support to "unknown" (for single strings) or \
+"not_available" (where that reads more naturally, e.g. for a business model). \
+An honest "unknown" is always better than an invented value.
 
 Confidence guidance:
-- "high": website and/or LinkedIn content clearly supports most fields.
-- "medium": some fields supported, others inferred from limited context.
-- "low": little more than the company name and URLs were available.
+- "high": the domain identifies a company you know well and most fields are \
+filled from solid knowledge of it.
+- "medium": the company is identified, but several fields are inferred or \
+incomplete.
+- "low": you could not confidently identify the company; little more than \
+the name and URLs were available.
 """
 
 if not settings.AI_MODEL:

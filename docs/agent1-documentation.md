@@ -124,15 +124,18 @@ importance:
   `with_structured_output` — the provider's JSON/tool-calling mode
   guarantees types and required fields, so a malformed profile fails
   validation before reaching our code.
-- **Hallucination control.** The system prompt forbids inventing or
-  inferring unsupported facts: unknown fields must come back as
-  `"unknown"` / `"not_available"` and be listed in `missingFields`, and
-  outside knowledge about similarly-named companies may only be used when
-  the provided domain or LinkedIn URL confirms it's the same company. In
-  practice this means a company the model can't verify yields a mostly-
-  `unknown`, `confidence: "low"` profile — by design.
-- **Confidence is rubric-based**: the prompt defines what `high` /
-  `medium` / `low` mean so the value is comparable across companies.
+- **Hallucination control.** When the domain clearly identifies a company
+  the model knows (github.com → GitHub), it may use its knowledge of that
+  company to fill the profile. For companies it cannot confidently
+  identify — a similar name alone is not identification — it must never
+  guess: fields come back as `"unknown"` / `"not_available"` and are
+  listed in `missingFields`, yielding a sparse, `confidence: "low"`
+  profile by design.
+- **Confidence is rubric-based and evidence-aware**: the prompt defines
+  what `high` / `medium` / `low` mean so the value is comparable across
+  companies, and the merge step promotes confidence one level when the
+  website scan confirms evidence (recorded in `sourceReferences`) — the
+  AI rated itself before any evidence existed.
 - **Deterministic**: `temperature=0`.
 - **Fail fast on bad output**: one retry on malformed output, then the
   company is marked `Failed` (a model that returns garbage once tends to

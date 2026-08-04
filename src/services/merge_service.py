@@ -24,6 +24,10 @@ _BOOLEAN_EVIDENCE_FIELDS = {
     "customerJourneyFound": "customerJourneyPresent",
 }
 
+# One-level confidence promotion applied when the website scan confirmed
+# evidence: the AI rated itself before any evidence existed.
+_CONFIDENCE_BUMP = {"low": "medium", "medium": "high", "high": "high"}
+
 
 def merge_results(enrichment: dict, scan_result: dict) -> dict:
     """
@@ -59,6 +63,14 @@ def merge_results(enrichment: dict, scan_result: dict) -> dict:
                 sources_used.add("website_scan")
                 for url in source_urls:
                     source_references.append({"field": profile_key, "url": url})
+
+    # Confirmed website evidence makes the profile more trustworthy than
+    # the AI's pre-evidence self-assessment — raise confidence one level
+    # when the scan actually backed something up. Evidence-based, so it
+    # stays consistent with "explicit confidence on every claim": the
+    # bump happens only when sourceReferences records what raised it.
+    if source_references:
+        merged["confidence"] = _CONFIDENCE_BUMP.get(merged.get("confidence"), merged.get("confidence"))
 
     merged["missingFields"] = missing_fields
     merged["sourcesUsed"] = sorted(sources_used)

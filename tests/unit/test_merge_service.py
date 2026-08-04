@@ -117,3 +117,35 @@ def test_merged_status_is_completed():
     merged = merge_service.merge_results(BASE_ENRICHMENT, scan_result)
 
     assert merged["status"] == "Completed"
+
+def test_confirmed_evidence_bumps_confidence_one_level():
+    # low -> medium; the AI rated itself before any evidence existed, so
+    # confirmed website evidence promotes confidence exactly one level.
+    scan_result = {
+        "scanStatus": "Completed",
+        "extractedData": {"pricingFound": True, "sourceUrls": ["https://example.com/pricing"]},
+    }
+
+    merged = merge_service.merge_results(BASE_ENRICHMENT, scan_result)
+
+    assert merged["confidence"] == "medium"
+
+
+def test_confirmed_evidence_does_not_raise_high_above_high():
+    scan_result = {
+        "scanStatus": "Completed",
+        "extractedData": {"pricingFound": True, "sourceUrls": ["https://example.com/pricing"]},
+    }
+
+    merged = merge_service.merge_results(dict(BASE_ENRICHMENT, confidence="high"), scan_result)
+
+    assert merged["confidence"] == "high"
+
+
+def test_no_confirmed_evidence_leaves_confidence_unchanged():
+    # A completed scan that found nothing is not evidence — no bump.
+    scan_result = {"scanStatus": "Completed", "extractedData": {"pricingFound": False}}
+
+    merged = merge_service.merge_results(BASE_ENRICHMENT, scan_result)
+
+    assert merged["confidence"] == "low"
