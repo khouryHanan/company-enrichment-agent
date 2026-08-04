@@ -1,6 +1,6 @@
 # Test Results — Agent 1 (SCRUM-15)
 
-Latest full run: **2026-07-31** on `main` — **86 passed, 0 failed** (1 deprecation
+Latest full run: **2026-07-31** on `feature/agent1-normalization-clean` — **94 passed, 0 failed** (1 deprecation
 warning from Starlette's test client, unrelated to our code).
 
 ```bash
@@ -17,6 +17,7 @@ pytest -v       # per-test detail
 | `tests/unit/test_agent3_integration.py` | 9 | Agent 3 calls, retries, bad responses |
 | `tests/unit/test_merge_service.py` | 8 | AI + website-evidence merging |
 | `tests/unit/test_logging.py` | 8 | Log format, secret redaction |
+| `tests/unit/test_normalization_service.py` | 8 | Website/LinkedIn URL cleanup (SCRUM-6) |
 | `tests/unit/test_retry.py` | 6 | Shared retry helper |
 | `tests/unit/test_enrichment_service.py` | 6 | AI output parsing/schema enforcement |
 | `tests/unit/test_batch_service.py` | 5 | Batch orchestration, failure isolation |
@@ -24,7 +25,7 @@ pytest -v       # per-test detail
 | `tests/api/test_bulk_input.py` | 9 | POST input validation |
 | `tests/api/test_get_endpoints.py` | 5 | GET status/result endpoints |
 | `tests/api/test_routes.py` | 3 | Health check, error responses |
-| **Total** | **86** | |
+| **Total** | **94** | |
 
 ## Required scenarios (SCRUM-15) → tests
 

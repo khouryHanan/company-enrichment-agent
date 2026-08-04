@@ -1,3 +1,6 @@
+import pytest
+
+from src.core.errors import InvalidInputError
 from src.services.normalization_service import (
     normalize_linkedin_url,
     normalize_website_url,
@@ -14,15 +17,18 @@ def test_normalize_website_url():
 
 
 def test_normalize_website_url_empty_string():
-    assert normalize_website_url("") is None
+    with pytest.raises(InvalidInputError):
+        normalize_website_url("")
 
 
 def test_normalize_website_url_whitespace():
-    assert normalize_website_url("   ") is None
+    with pytest.raises(InvalidInputError):
+        normalize_website_url("   ")
 
 
 def test_normalize_website_url_none():
-    assert normalize_website_url(None) is None
+    with pytest.raises(InvalidInputError):
+        normalize_website_url(None)
 
 
 def test_normalize_linkedin_url():
