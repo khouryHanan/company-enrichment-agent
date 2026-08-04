@@ -19,8 +19,10 @@ python scripts/mock_agent3.py          # terminal 1 — stands in for Agent 3
 ```
 
 ```bash
-uvicorn src.main:app --reload          # terminal 2 — Agent 1's API
+python scripts/run_agent1.py           # terminal 2 — Agent 1's API
 ```
+
+Both stop when you type `exit` + Enter (Ctrl+C works too).
 
 Sanity check: `curl http://localhost:8000/health` → `{"status": "ok"}`.
 
@@ -115,7 +117,7 @@ sqlite3 -header -column agent1.db \
 
 ## Step 5 — What happens when things fail
 
-**Kill terminal 1 (Ctrl+C on the mock Agent 3), then:**
+**Stop the mock Agent 3 (type `exit` in terminal 1), then:**
 
 ```bash
 curl -s -X POST http://localhost:8000/api/agents/agent1/bulk-enrichment \

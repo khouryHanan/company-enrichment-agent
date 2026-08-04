@@ -8,14 +8,25 @@ the scan request and returns confirmed website evidence, which the merge
 step records with source references.
 
 Run:  python scripts/mock_agent3.py
-Stop: Ctrl+C  (stopping it mid-demo is also how you demonstrate the
-"Partially Completed" graceful-degradation path.)
+Stop: type "exit" + Enter, or Ctrl+C  (stopping it mid-demo is also how
+you demonstrate the "Partially Completed" graceful-degradation path.)
 """
 
 import json
+import sys
+import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 PORT = 8003
+
+
+def watch_stdin(server: HTTPServer) -> None:
+    """Shut the server down when the user types "exit"."""
+    for line in sys.stdin:
+        if line.strip().lower() == "exit":
+            print("[mock-agent3] exit requested, shutting down", flush=True)
+            threading.Thread(target=server.shutdown, daemon=True).start()
+            return
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -46,5 +57,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"[mock-agent3] listening on http://localhost:{PORT}", flush=True)
-    HTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    server = HTTPServer(("127.0.0.1", PORT), Handler)
+    print(f"[mock-agent3] listening on http://localhost:{PORT} — type 'exit' to stop", flush=True)
+    threading.Thread(target=watch_stdin, args=(server,), daemon=True).start()
+    server.serve_forever()
