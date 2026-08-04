@@ -55,8 +55,8 @@ uvicorn src.main:app --reload
 
 Confirm with `http://localhost:8000/health` → `{"status": "ok"}`.
 Interactive API docs (Swagger) are auto-served at `/docs`.
-Database tables are created automatically on first use — no migration
-step.
+Database tables are created automatically at application startup — no
+migration step. Deleting `agent1.db` for a clean slate is always safe.
 
 ### Environment variables (`.env`)
 
