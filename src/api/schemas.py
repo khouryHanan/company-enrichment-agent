@@ -60,6 +60,15 @@ class CompanyEnrichmentResult(BaseModel):
     productsServices: list[str]
     targetAudience: list[str]
     businessModel: str
+    # Optional with defaults so rows saved before these fields existed
+    # still serialize cleanly.
+    location: Optional[str] = None
+    companySize: Optional[str] = None
+    foundedYear: Optional[str] = None
+    headquarters: Optional[str] = None
+    keyCompetitors: list[str] = Field(default_factory=list)
+    techStack: list[str] = Field(default_factory=list)
+    keyContacts: list[str] = Field(default_factory=list)
     confidence: str
     missingFields: list[str]
     sourcesUsed: list[str]

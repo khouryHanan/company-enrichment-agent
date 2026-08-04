@@ -80,9 +80,16 @@ valid `websiteUrl` are required; `linkedinUrl` is optional but must be a
 LinkedIn company-profile URL when present.
 
 **Output** — a batch summary (`batchId`, `status`, counts) from the POST,
-and per-company enrichment profiles (description, industry,
-products/services, target audience, business model, `confidence`,
-`missingFields`, `sourcesUsed`, `status`) from the company endpoint.
+and per-company enrichment profiles from the company endpoint:
+description, industry, products/services, target audience, business
+model, location, company size, founded year, headquarters, key
+competitors, tech stack, key contacts, plus `confidence`,
+`missingFields`, `sourcesUsed`, and `status`.
+
+`keyContacts` holds publicly known leadership as `"Name — Role"` only.
+The prompt forbids the model from producing email addresses or phone
+numbers: contact details must come from a verified source (EYEjee's
+People Reveal), never from a language model's recall.
 
 Full JSON examples for every endpoint and error case:
 [`api-examples.md`](api-examples.md).

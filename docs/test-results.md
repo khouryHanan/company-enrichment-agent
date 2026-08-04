@@ -1,6 +1,6 @@
 # Test Results — Agent 1 (SCRUM-15)
 
-Latest full run: **2026-08-04** on `main` — **101 passed, 0 failed** (1 deprecation
+Latest full run: **2026-08-04** on `main` — **102 passed, 0 failed** (1 deprecation
 warning from Starlette's test client, unrelated to our code).
 
 ```bash
@@ -13,7 +13,7 @@ pytest -v       # per-test detail
 | Location | Tests | Covers |
 |---|---|---|
 | `tests/unit/test_validation_service.py` | 15 | Field/URL validation, duplicates |
-| `tests/unit/test_repository.py` | 12 | Database persistence + retry |
+| `tests/unit/test_repository.py` | 13 | Database persistence + retry |
 | `tests/unit/test_agent3_integration.py` | 9 | Agent 3 calls, retries, bad responses |
 | `tests/unit/test_merge_service.py` | 11 | AI + website-evidence merging |
 | `tests/unit/test_logging.py` | 8 | Log format, secret redaction |
@@ -25,7 +25,7 @@ pytest -v       # per-test detail
 | `tests/api/test_bulk_input.py` | 9 | POST input validation |
 | `tests/api/test_get_endpoints.py` | 7 | GET status/result endpoints |
 | `tests/api/test_routes.py` | 3 | Health check, error responses |
-| **Total** | **101** | |
+| **Total** | **102** | |
 
 ## Required scenarios (SCRUM-15) → tests
 

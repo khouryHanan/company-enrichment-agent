@@ -44,6 +44,13 @@ class CompanyProfile(BaseModel):
     productsServices: list[str]
     targetAudience: list[str]
     businessModel: str = Field(..., description='Use "not_available" if unknown.')
+    location: str = Field(..., description='Country/city of primary operations. Use "unknown" if it cannot be determined.')
+    companySize: str = Field(..., description='Approximate employee count or range, e.g. "51-200". Use "unknown" if it cannot be determined.')
+    foundedYear: str = Field(..., description='Founding year, e.g. "2008". Use "unknown" if it cannot be determined.')
+    headquarters: str = Field(..., description='Headquarters city and country. Use "unknown" if it cannot be determined.')
+    keyCompetitors: list[str] = Field(..., description="Main competitors. Empty list if unknown.")
+    techStack: list[str] = Field(..., description="Technologies the company is publicly known to build on or offer. Empty list if unknown.")
+    keyContacts: list[str] = Field(..., description='Publicly known leadership only, formatted "Name — Role". Never include email addresses or phone numbers. Empty list if unknown.')
     confidence: Literal["low", "medium", "high"]
     missingFields: list[str] = Field(..., description="Names of fields that could not be determined.")
     sourcesUsed: list[str] = Field(..., description='e.g. "company_name", "website_url", "linkedin_url".')
@@ -62,6 +69,10 @@ provided domain or LinkedIn URL — a similar name alone is not identification. 
 For those, set fields you cannot support to "unknown" (for single strings) or \
 "not_available" (where that reads more naturally, e.g. for a business model). \
 An honest "unknown" is always better than an invented value.
+- keyContacts may only contain leadership that is publicly and widely known \
+(founders, CEO). Format each entry as "Name — Role". Never include email \
+addresses, phone numbers, or any other contact details — return names and \
+roles only.
 
 Confidence guidance:
 - "high": the domain identifies a company you know well and most fields are \
@@ -142,6 +153,13 @@ def enrich_company(company, normalized: dict) -> dict:
         "productsServices": profile.productsServices,
         "targetAudience": profile.targetAudience,
         "businessModel": profile.businessModel,
+        "location": profile.location,
+        "companySize": profile.companySize,
+        "foundedYear": profile.foundedYear,
+        "headquarters": profile.headquarters,
+        "keyCompetitors": profile.keyCompetitors,
+        "techStack": profile.techStack,
+        "keyContacts": profile.keyContacts,
         "confidence": profile.confidence,
         "missingFields": profile.missingFields,
         "sourcesUsed": profile.sourcesUsed,

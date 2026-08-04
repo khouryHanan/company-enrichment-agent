@@ -18,8 +18,15 @@ VALID_PROFILE = CompanyProfile(
     productsServices=["CRM", "Workflow automation"],
     targetAudience=["Sales teams", "Small businesses"],
     businessModel="Subscription",
+    location="Tel Aviv, Israel",
+    companySize="51-200",
+    foundedYear="2015",
+    headquarters="Tel Aviv, Israel",
+    keyCompetitors=["Rival Co"],
+    techStack=["Python", "PostgreSQL"],
+    keyContacts=["Jane Doe — CEO"],
     confidence="medium",
-    missingFields=["location", "companySize"],
+    missingFields=[],
     sourcesUsed=["company_name", "website_url"],
 )
 
@@ -69,12 +76,20 @@ def test_missing_data_marked_unknown_not_invented():
         productsServices=[],
         targetAudience=[],
         businessModel="not_available",
+        location="unknown",
+        companySize="unknown",
+        foundedYear="unknown",
+        headquarters="unknown",
+        keyCompetitors=[],
+        techStack=[],
+        keyContacts=[],
         confidence="low",
         missingFields=["industry", "businessModel", "productsServices", "targetAudience"],
         sourcesUsed=["company_name"],
     )
     assert sparse.industry == "unknown"
     assert sparse.businessModel == "not_available"
+    assert sparse.keyContacts == []
 
 
 class FakeCompany:

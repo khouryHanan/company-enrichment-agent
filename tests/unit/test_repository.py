@@ -218,3 +218,32 @@ def test_get_companies_for_batch_returns_enriched_and_failed():
 
 def test_get_companies_for_batch_empty_for_unknown_batch():
     assert repo.get_companies_for_batch("no-such-batch") == []
+
+
+def test_save_company_roundtrips_extended_profile_fields():
+    validation = FakeValidationResult(valid=1, total=1)
+    batch_id = repo.create_batch(status="Running", validation=validation)
+
+    repo.save_company(batch_id, {
+        "companyId": "company_ext",
+        "companyName": "Extended Co",
+        "websiteUrl": "https://extended.co",
+        "location": "Berlin, Germany",
+        "companySize": "201-500",
+        "foundedYear": "2012",
+        "headquarters": "Berlin, Germany",
+        "keyCompetitors": ["Rival One", "Rival Two"],
+        "techStack": ["Go", "Kubernetes"],
+        "keyContacts": ["Max Muster — CEO"],
+        "status": "Completed",
+    })
+
+    saved = repo.get_company("company_ext")
+
+    assert saved["location"] == "Berlin, Germany"
+    assert saved["companySize"] == "201-500"
+    assert saved["foundedYear"] == "2012"
+    assert saved["headquarters"] == "Berlin, Germany"
+    assert saved["keyCompetitors"] == ["Rival One", "Rival Two"]
+    assert saved["techStack"] == ["Go", "Kubernetes"]
+    assert saved["keyContacts"] == ["Max Muster — CEO"]

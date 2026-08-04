@@ -264,6 +264,16 @@ function badge(status) {
 
 function esc(x) { const d = document.createElement("div"); d.textContent = x ?? ""; return d.innerHTML; }
 
+function val(x) {
+  return esc(x && x !== "unknown" && x !== "not_available" ? x : "—");
+}
+
+function chipRow(label, arr) {
+  const items = (arr || []).filter(x => x && x !== "unknown" && x !== "not_available");
+  if (!items.length) return "";
+  return `<div class="kv k">${label}</div><div class="chips">${items.map(x => `<span class="chip">${esc(x)}</span>`).join("")}</div>`;
+}
+
 function chips(arr, cls = "") {
   const items = (arr || []).filter(x => x && x !== "unknown" && x !== "not_available");
   if (!items.length) return `<span class="chip">—</span>`;
@@ -287,10 +297,16 @@ function renderCompanies(companies) {
         ${badge(c.status)}
       </div>
       <div class="desc">${esc(desc)}</div>
-      <div class="kv"><span class="k">Industry:</span> ${esc(c.industry && c.industry !== "unknown" ? c.industry : "—")}
-        &nbsp;&nbsp;<span class="k">Business model:</span> ${esc(c.businessModel && c.businessModel !== "not_available" ? c.businessModel : "—")}</div>
+      <div class="kv"><span class="k">Industry:</span> ${val(c.industry)}
+        &nbsp;&nbsp;<span class="k">Business model:</span> ${val(c.businessModel)}</div>
+      <div class="kv"><span class="k">HQ:</span> ${val(c.headquarters)}
+        &nbsp;&nbsp;<span class="k">Founded:</span> ${val(c.foundedYear)}
+        &nbsp;&nbsp;<span class="k">Size:</span> ${val(c.companySize)}</div>
       <div class="kv k">Products &amp; services</div><div class="chips">${chips(c.productsServices)}</div>
       <div class="kv k">Target audience</div><div class="chips">${chips(c.targetAudience)}</div>
+      ${chipRow("Key competitors", c.keyCompetitors)}
+      ${chipRow("Tech stack", c.techStack)}
+      ${chipRow("Key contacts", c.keyContacts)}
       <div class="kv k">Sources used</div><div class="chips">${chips(c.sourcesUsed, "src")}</div>`;
     host.appendChild(card);
   }
