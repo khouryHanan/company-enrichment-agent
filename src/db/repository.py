@@ -191,36 +191,55 @@ def save_company(batch_id: str, profile: dict) -> None:
         session.close()
 
 
+def _company_to_dict(company: Company) -> dict:
+    # missingFields/sourcesUsed aren't their own Company columns —
+    # pull them back out of the saved raw AI output if present.
+    missing_fields = []
+    sources_used = []
+    if company.enrichment_result and company.enrichment_result.raw_ai_output:
+        raw = company.enrichment_result.raw_ai_output
+        missing_fields = raw.get("missingFields", [])
+        sources_used = raw.get("sourcesUsed", [])
+
+    return {
+        "companyId": company.id,
+        "batchId": company.batch_id,
+        "companyName": company.company_name,
+        "description": company.description,
+        "industry": company.industry,
+        "productsServices": company.products_services,
+        "targetAudience": company.target_audience,
+        "businessModel": company.business_model,
+        "confidence": company.confidence,
+        "missingFields": missing_fields,
+        "sourcesUsed": sources_used,
+        "status": company.status,
+    }
+
+
 def get_company(company_id: str) -> dict | None:
     session = SessionLocal()
     try:
         company = session.get(Company, company_id)
         if not company:
             return None
+        return _company_to_dict(company)
+    finally:
+        session.close()
 
-        # missingFields/sourcesUsed aren't their own Company columns —
-        # pull them back out of the saved raw AI output if present.
-        missing_fields = []
-        sources_used = []
-        if company.enrichment_result and company.enrichment_result.raw_ai_output:
-            raw = company.enrichment_result.raw_ai_output
-            missing_fields = raw.get("missingFields", [])
-            sources_used = raw.get("sourcesUsed", [])
 
-        return {
-            "companyId": company.id,
-            "batchId": company.batch_id,
-            "companyName": company.company_name,
-            "description": company.description,
-            "industry": company.industry,
-            "productsServices": company.products_services,
-            "targetAudience": company.target_audience,
-            "businessModel": company.business_model,
-            "confidence": company.confidence,
-            "missingFields": missing_fields,
-            "sourcesUsed": sources_used,
-            "status": company.status,
-        }
+def get_companies_for_batch(batch_id: str) -> list[dict]:
+    """All companies recorded for a batch — enriched and failed alike —
+    in insertion order. Used by the demo UI's batch results view."""
+    session = SessionLocal()
+    try:
+        companies = (
+            session.query(Company)
+            .filter(Company.batch_id == batch_id)
+            .order_by(Company.created_at)
+            .all()
+        )
+        return [_company_to_dict(company) for company in companies]
     finally:
         session.close()
 

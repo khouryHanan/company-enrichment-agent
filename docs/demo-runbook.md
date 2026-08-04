@@ -24,6 +24,25 @@ python scripts/run_agent1.py           # terminal 2 — Agent 1's API
 
 Both stop when you type `exit` + Enter (Ctrl+C works too).
 
+## The client-facing way: the demo UI
+
+Open **http://localhost:8000/demo** — a client-ready UI styled after the
+EYEjee platform this agent extends. It comes pre-loaded with the demo
+batch: click **Enrich companies** and the page shows live pipeline
+stages, then the batch summary tiles (received / valid / invalid /
+duplicates) and an enriched profile card per company — status badge,
+confidence, products, audience, and which sources (including the
+website scan) backed each profile.
+
+The failure story works there too: stop the mock Agent 3, submit another
+company from the UI, and its card comes back **Partially Completed**
+with the Agent 3 Scanner dot in the header turning red.
+
+Steps 2–5 below drive the same flow from the terminal — use whichever
+fits the audience (the UI for clients, the terminal + logs + SQL for the
+technical deep-dive), or the UI first and the terminal for the
+"under the hood" encore.
+
 Sanity check: `curl http://localhost:8000/health` → `{"status": "ok"}`.
 
 > **Say:** "Agent 3 — the website scanner — is another team's service, so

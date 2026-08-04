@@ -3,9 +3,11 @@ Agent 1 — Bulk Company Enrichment Agent
 Application entrypoint.
 """
 
+from pathlib import Path
+
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from src.api.routes import router
 from src.db.database import init_db
@@ -43,3 +45,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/demo", include_in_schema=False)
+def demo_ui():
+    """Client-facing demo UI (SCRUM-18) — a single self-contained page
+    styled after the EYEjee platform this agent extends."""
+    return FileResponse(Path(__file__).parent / "static" / "demo.html")

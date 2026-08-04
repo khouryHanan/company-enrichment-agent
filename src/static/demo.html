@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EYEjee — Bulk Company Enrichment</title>
+<style>
+  :root {
+    --bg: #070b14;
+    --bg-card: #0c1220;
+    --bg-inset: #101827;
+    --border: rgba(148, 210, 189, 0.14);
+    --border-strong: rgba(148, 210, 189, 0.32);
+    --mint: #57c8a1;
+    --mint-soft: rgba(87, 200, 161, 0.14);
+    --text: #e8edf5;
+    --text-dim: #8b95a7;
+    --amber: #e0b45c;
+    --amber-soft: rgba(224, 180, 92, 0.14);
+    --red: #e07a6b;
+    --red-soft: rgba(224, 122, 107, 0.14);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.55 "Inter", -apple-system, "Segoe UI", sans-serif;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(ellipse 60% 40% at 50% -5%, rgba(87, 200, 161, 0.08), transparent),
+      linear-gradient(rgba(148, 210, 189, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 210, 189, 0.03) 1px, transparent 1px);
+    background-size: 100% 100%, 44px 44px, 44px 44px;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 18px 32px; border-bottom: 1px solid var(--border);
+  }
+  .logo { font-weight: 700; letter-spacing: 0.35em; font-size: 15px; }
+  .logo span { color: var(--mint); }
+  .crumb { color: var(--text-dim); font-size: 13px; }
+  .health { margin-left: auto; display: flex; gap: 16px; font-size: 12px; color: var(--text-dim); }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #556; margin-right: 6px; }
+  .dot.up { background: var(--mint); box-shadow: 0 0 6px var(--mint); }
+  .dot.down { background: var(--red); }
+  main { max-width: 1100px; margin: 0 auto; padding: 36px 32px 80px; }
+  .eyebrow {
+    color: var(--mint); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.22em; text-transform: uppercase; margin-bottom: 8px;
+  }
+  h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+  .sub { color: var(--text-dim); margin: 8px 0 28px; max-width: 640px; }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 22px 24px;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+       color: var(--text-dim); font-weight: 600; padding: 0 10px 10px 0; }
+  td { padding: 0 10px 10px 0; }
+  input[type=text] {
+    width: 100%; background: var(--bg-inset); border: 1px solid var(--border);
+    border-radius: 9px; color: var(--text); padding: 9px 12px; font-size: 14px; outline: none;
+  }
+  input[type=text]:focus { border-color: var(--border-strong); }
+  input::placeholder { color: #566072; }
+  .row-del {
+    background: none; border: none; color: var(--text-dim); cursor: pointer;
+    font-size: 16px; padding: 4px 8px; border-radius: 6px;
+  }
+  .row-del:hover { color: var(--red); background: var(--red-soft); }
+  .actions { display: flex; gap: 12px; margin-top: 8px; align-items: center; }
+  .btn {
+    border: none; cursor: pointer; font-weight: 600; font-size: 14px;
+    border-radius: 999px; padding: 11px 24px; font-family: inherit;
+  }
+  .btn-primary { background: var(--mint); color: #06231a; }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-primary:disabled { opacity: 0.45; cursor: default; }
+  .btn-ghost {
+    background: transparent; color: var(--text); border: 1px solid var(--border-strong);
+  }
+  .btn-ghost:hover { background: var(--mint-soft); }
+  .spinner {
+    width: 15px; height: 15px; border: 2px solid rgba(6,35,26,0.3);
+    border-top-color: #06231a; border-radius: 50%; display: inline-block;
+    vertical-align: -3px; margin-right: 8px; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .stage { color: var(--text-dim); font-size: 13px; }
+  .stage b { color: var(--mint); font-weight: 600; }
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin: 26px 0; }
+  .stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px;
+          padding: 16px 18px; }
+  .stat .num { font-size: 26px; font-weight: 700; }
+  .stat .lbl { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  .stat.mint .num { color: var(--mint); }
+  .stat.amber .num { color: var(--amber); }
+  .stat.red .num { color: var(--red); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2, 1fr); } }
+  .company { display: flex; flex-direction: column; gap: 10px; }
+  .company-head { display: flex; align-items: center; gap: 10px; }
+  .company-head h3 { font-size: 17px; font-weight: 650; margin-right: auto; }
+  .badge { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; padding: 4px 11px;
+           border-radius: 999px; white-space: nowrap; }
+  .badge.completed { color: var(--mint); background: var(--mint-soft); }
+  .badge.partial { color: var(--amber); background: var(--amber-soft); }
+  .badge.failed { color: var(--red); background: var(--red-soft); }
+  .badge.conf { color: var(--text-dim); background: var(--bg-inset); border: 1px solid var(--border); }
+  .desc { color: var(--text-dim); font-size: 14px; }
+  .kv { font-size: 13px; }
+  .kv .k { color: var(--text-dim); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { font-size: 12px; color: var(--text); background: var(--bg-inset);
+          border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
+  .chip.src { color: var(--mint); border-color: var(--border-strong); }
+  .empty { color: var(--text-dim); text-align: center; padding: 40px 0; }
+  .error-banner { color: var(--red); background: var(--red-soft); border: 1px solid rgba(224,122,107,0.3);
+                  border-radius: 10px; padding: 12px 16px; margin-top: 16px; font-size: 14px; display: none; }
+  section h2 { font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;
+               color: var(--mint); font-weight: 600; margin: 34px 0 14px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">EYE<span>jee</span></div>
+  <div class="crumb">Company Discovery&nbsp;&nbsp;/&nbsp;&nbsp;Bulk Enrichment</div>
+  <div class="health">
+    <span><span class="dot" id="dot-api"></span>Agent 1 API</span>
+    <span><span class="dot" id="dot-a3"></span>Agent 3 Scanner</span>
+  </div>
+</header>
+
+<main>
+  <div class="eyebrow">Signal → Judgment → Action</div>
+  <h1>Bulk Company Enrichment</h1>
+  <p class="sub">Submit a list of target companies. Each one is validated, enriched by AI,
+     confirmed against live website evidence, and returned with explicit confidence on every claim.</p>
+
+  <div class="card">
+    <table id="input-table">
+      <thead><tr><th style="width:26%">Company name</th><th style="width:34%">Website</th><th style="width:34%">LinkedIn (optional)</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="addRow()">+ Add company</button>
+      <button class="btn btn-ghost" onclick="loadDemo()">Load demo batch</button>
+      <button class="btn btn-primary" id="go" onclick="submitBatch()">Enrich companies&nbsp;→</button>
+      <span class="stage" id="stage"></span>
+    </div>
+    <div class="error-banner" id="error"></div>
+  </div>
+
+  <div id="results" style="display:none">
+    <section><h2>Batch summary</h2></section>
+    <div class="stats">
+      <div class="stat"><div class="num" id="s-total">–</div><div class="lbl">Received</div></div>
+      <div class="stat mint"><div class="num" id="s-valid">–</div><div class="lbl">Valid</div></div>
+      <div class="stat red"><div class="num" id="s-invalid">–</div><div class="lbl">Invalid</div></div>
+      <div class="stat amber"><div class="num" id="s-dup">–</div><div class="lbl">Duplicates</div></div>
+      <div class="stat"><div class="num" id="s-status" style="font-size:15px;line-height:1.9">–</div><div class="lbl">Batch status</div></div>
+    </div>
+    <section><h2>Enriched profiles</h2></section>
+    <div class="grid" id="companies"></div>
+  </div>
+</main>
+
+<script>
+const DEMO = [
+  ["Anthropic", "https://WWW.Anthropic.com/", "https://www.linkedin.com/company/anthropicresearch"],
+  ["GitHub", "https://github.com", ""],
+  ["Anthropic Inc", "https://www.anthropic.com/about", ""],
+  ["Broken Co", "not-a-url", ""],
+];
+
+function addRow(name = "", site = "", li = "") {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input type="text" placeholder="Acme Inc" value="${name}"></td>
+    <td><input type="text" placeholder="https://acme.com" value="${site}"></td>
+    <td><input type="text" placeholder="https://linkedin.com/company/acme" value="${li}"></td>
+    <td><button class="row-del" title="Remove" onclick="this.closest('tr').remove()">✕</button></td>`;
+  document.getElementById("rows").appendChild(tr);
+}
+
+function loadDemo() {
+  document.getElementById("rows").innerHTML = "";
+  DEMO.forEach(r => addRow(...r));
+}
+
+function collect() {
+  return [...document.querySelectorAll("#rows tr")].map(tr => {
+    const [name, site, li] = [...tr.querySelectorAll("input")].map(i => i.value.trim());
+    const c = { companyName: name, websiteUrl: site };
+    if (li) c.linkedinUrl = li;
+    return c;
+  }).filter(c => c.companyName || c.websiteUrl);
+}
+
+const STAGES = ["Validating input", "Enriching with AI", "Scanning websites", "Merging evidence"];
+let stageTimer = null;
+
+function startStages() {
+  let i = 0;
+  const el = document.getElementById("stage");
+  el.innerHTML = `<b>${STAGES[0]}…</b>`;
+  stageTimer = setInterval(() => {
+    i = Math.min(i + 1, STAGES.length - 1);
+    el.innerHTML = STAGES.map((s, j) => j < i ? `${s} ✓` : (j === i ? `<b>${s}…</b>` : "")).filter(Boolean).join("&nbsp;&nbsp;");
+  }, 6000);
+}
+
+function stopStages() { clearInterval(stageTimer); document.getElementById("stage").textContent = ""; }
+
+async function submitBatch() {
+  const companies = collect();
+  const err = document.getElementById("error");
+  err.style.display = "none";
+  if (!companies.length) { err.textContent = "Add at least one company."; err.style.display = "block"; return; }
+
+  const go = document.getElementById("go");
+  go.disabled = true;
+  go.innerHTML = `<span class="spinner"></span>Enriching`;
+  startStages();
+
+  try {
+    const res = await fetch("/api/agents/agent1/bulk-enrichment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ companies }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const detail = (data.errors || []).map(e => `${e.field}: ${e.message}`).join("; ") || data.detail || res.status;
+      throw new Error(detail);
+    }
+    renderSummary(data);
+    const list = await (await fetch(`/api/agents/agent1/bulk-enrichment/${data.batchId}/companies`)).json();
+    renderCompanies(list.companies || []);
+    document.getElementById("results").style.display = "block";
+    document.getElementById("results").scrollIntoView({ behavior: "smooth" });
+  } catch (e) {
+    err.textContent = "Request failed — " + e.message;
+    err.style.display = "block";
+  } finally {
+    stopStages();
+    go.disabled = false;
+    go.innerHTML = "Enrich companies&nbsp;→";
+  }
+}
+
+function renderSummary(b) {
+  s("s-total", b.totalReceived); s("s-valid", b.validCompanies);
+  s("s-invalid", b.invalidCompanies); s("s-dup", b.duplicates); s("s-status", b.status);
+}
+function s(id, v) { document.getElementById(id).textContent = v; }
+
+function badge(status) {
+  const cls = status === "Completed" ? "completed" : (status === "Failed" ? "failed" : "partial");
+  return `<span class="badge ${cls}">${esc(status)}</span>`;
+}
+
+function esc(x) { const d = document.createElement("div"); d.textContent = x ?? ""; return d.innerHTML; }
+
+function chips(arr, cls = "") {
+  const items = (arr || []).filter(x => x && x !== "unknown" && x !== "not_available");
+  if (!items.length) return `<span class="chip">—</span>`;
+  return items.map(x => `<span class="chip ${cls}">${esc(x)}</span>`).join("");
+}
+
+function renderCompanies(companies) {
+  const host = document.getElementById("companies");
+  host.innerHTML = "";
+  if (!companies.length) { host.innerHTML = `<div class="empty">No companies recorded for this batch.</div>`; return; }
+  for (const c of companies) {
+    const card = document.createElement("div");
+    card.className = "card company";
+    const desc = (c.description && c.description !== "not_available") ? c.description
+               : (c.status === "Failed" ? "Processing failed for this company — see the errors table / logs for the recorded reason."
+                                        : "No verified description available — the AI declined to guess.");
+    card.innerHTML = `
+      <div class="company-head">
+        <h3>${esc(c.companyName)}</h3>
+        ${c.confidence ? `<span class="badge conf">confidence: ${esc(c.confidence)}</span>` : ""}
+        ${badge(c.status)}
+      </div>
+      <div class="desc">${esc(desc)}</div>
+      <div class="kv"><span class="k">Industry:</span> ${esc(c.industry && c.industry !== "unknown" ? c.industry : "—")}
+        &nbsp;&nbsp;<span class="k">Business model:</span> ${esc(c.businessModel && c.businessModel !== "not_available" ? c.businessModel : "—")}</div>
+      <div class="kv k">Products &amp; services</div><div class="chips">${chips(c.productsServices)}</div>
+      <div class="kv k">Target audience</div><div class="chips">${chips(c.targetAudience)}</div>
+      <div class="kv k">Sources used</div><div class="chips">${chips(c.sourcesUsed, "src")}</div>`;
+    host.appendChild(card);
+  }
+}
+
+async function health() {
+  try { await fetch("/health"); document.getElementById("dot-api").className = "dot up"; }
+  catch { document.getElementById("dot-api").className = "dot down"; }
+  try {
+    const r = await fetch("/api/agents/agent1/agent3-health");
+    document.getElementById("dot-a3").className = (await r.json()).reachable ? "dot up" : "dot down";
+  } catch { document.getElementById("dot-a3").className = "dot down"; }
+}
+
+loadDemo();
+health();
+setInterval(health, 10000);
+</script>
+</body>
+</html>

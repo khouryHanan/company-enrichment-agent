@@ -195,3 +195,26 @@ def test_save_company_retries_then_raises_on_persistent_operational_error(mock_s
 
     # Confirms it actually retried (didn't give up after one attempt).
     assert always_fails_commit.call_count > 1
+
+def test_get_companies_for_batch_returns_enriched_and_failed():
+    validation = FakeValidationResult(valid=2, total=2)
+    batch_id = repo.create_batch(status="Running", validation=validation)
+
+    repo.save_company(batch_id, {
+        "companyId": "company_ok",
+        "companyName": "Good Co",
+        "websiteUrl": "https://good.co",
+        "status": "Completed",
+    })
+    repo.mark_company_failed(batch_id, FakeCompany(companyName="Bad Co"), "enrichment failed")
+
+    companies = repo.get_companies_for_batch(batch_id)
+
+    assert len(companies) == 2
+    statuses = {c["companyName"]: c["status"] for c in companies}
+    assert statuses["Good Co"] == "Completed"
+    assert statuses["Bad Co"] == "Failed"
+
+
+def test_get_companies_for_batch_empty_for_unknown_batch():
+    assert repo.get_companies_for_batch("no-such-batch") == []

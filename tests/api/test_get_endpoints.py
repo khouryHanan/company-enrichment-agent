@@ -98,3 +98,26 @@ def test_get_company_result_matches_response_schema(mock_get_company):
         "missingFields", "sourcesUsed", "status",
     }
     assert required_fields.issubset(body.keys())
+
+@patch("src.api.routes.repository.get_companies_for_batch")
+@patch("src.api.routes.repository.get_batch")
+def test_get_batch_companies_returns_all_companies(mock_get_batch, mock_get_companies):
+    mock_get_batch.return_value = FAKE_BATCH
+    mock_get_companies.return_value = [dict(FAKE_COMPANY), dict(FAKE_COMPANY, companyId="company_2", status="Failed")]
+
+    response = client.get("/api/agents/agent1/bulk-enrichment/batch_abc123/companies")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["batchId"] == "batch_abc123"
+    assert len(body["companies"]) == 2
+    assert body["companies"][1]["status"] == "Failed"
+
+
+@patch("src.api.routes.repository.get_batch")
+def test_get_batch_companies_404_when_batch_missing(mock_get_batch):
+    mock_get_batch.return_value = None
+
+    response = client.get("/api/agents/agent1/bulk-enrichment/nope/companies")
+
+    assert response.status_code == 404
