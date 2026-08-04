@@ -106,15 +106,18 @@ Grab a `company_id` from the `company_saved` log lines, then:
 curl -s http://localhost:8000/api/companies/<companyId> | python3 -m json.tool
 ```
 
-> **Say (GitHub profile):** "A full profile — description, industry,
-> products, business model — and `sourcesUsed` includes `website_scan`,
-> meaning Agent 3's evidence was merged in."
+> **Say (either profile):** "A full profile — description, industry,
+> products, business model — at `confidence: high`. The domain clearly
+> identified a company the model knows, so it filled the profile from
+> solid knowledge; then the website scan confirmed evidence, which
+> promotes confidence one level. `sourcesUsed` includes `website_scan`,
+> and every confirmed field is linked to the URL that proved it."
 >
-> **Say (Anthropic profile):** "This one is mostly `unknown` with
-> `confidence: low` — that's the hallucination control working. We gave
-> the model a slightly-off LinkedIn URL, so it refused to fill fields it
-> couldn't verify rather than guessing. Honest `unknown` beats confident
-> fiction."
+> **Say (hallucination control):** "The flip side: a company the model
+> can't confidently identify from its domain comes back mostly `unknown`
+> at `confidence: low` — it's instructed that a similar name is not
+> identification and an honest unknown beats confident fiction. Add a
+> made-up company with a plausible URL if you want to show it live."
 
 ## Step 4 — Show the database records
 
@@ -168,10 +171,11 @@ Expected: batch `"Completed with Errors"`, and the company saved as
 
 ## Q&A cheat sheet
 
-- **Why is confidence low even for GitHub?** The model only received
-  name + URLs and our prompt forbids outside knowledge unless the domain
-  confirms identity — the rubric then caps confidence. More evidence
-  (real Agent 3 scraping) would raise it.
+- **How is confidence decided?** The model rates itself against a rubric
+  (identified + solid knowledge = high; identified but incomplete =
+  medium; unidentifiable = low), and the merge step promotes it one level
+  when the website scan confirms evidence — every bump is traceable to a
+  recorded source URL.
 - **What if the AI returns malformed JSON?** Structured output is
   schema-enforced (Pydantic + LangChain); a bad response fails
   validation, retries once, then the company is marked Failed.
