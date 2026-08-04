@@ -1,0 +1,21 @@
+{
+  "companies": [
+    {
+      "companyName": "Anthropic",
+      "websiteUrl": "https://WWW.Anthropic.com/",
+      "linkedinUrl": "https://www.linkedin.com/company/anthropicresearch"
+    },
+    {
+      "companyName": "GitHub",
+      "websiteUrl": "https://github.com"
+    },
+    {
+      "companyName": "Anthropic Inc",
+      "websiteUrl": "https://www.anthropic.com/about"
+    },
+    {
+      "companyName": "Broken Co",
+      "websiteUrl": "not-a-url"
+    }
+  ]
+}
