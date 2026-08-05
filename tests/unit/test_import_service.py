@@ -89,3 +89,17 @@ def test_real_export_file_maps_to_valid_input():
     for company in companies:
         assert is_valid_website_url(company["websiteUrl"])
         assert is_valid_linkedin_url(company["linkedinUrl"])
+
+
+def test_export_location_and_size_are_carried_through_as_known_facts():
+    [company] = import_service.from_eyejee_export([EXPORT_ROW])
+
+    assert company["location"] == "united states"
+    assert company["companySize"] == "11-50"
+
+
+def test_blank_export_location_and_size_are_omitted():
+    [company] = import_service.from_eyejee_export([dict(EXPORT_ROW, Loc="", Size="   ")])
+
+    assert "location" not in company
+    assert "companySize" not in company

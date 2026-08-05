@@ -92,8 +92,10 @@ runs it as a normal batch. Returns the same batch summary.
 ]
 ```
 
-Only `data_companies`, `website`, and `Linkedin_url` are consumed; other
-columns are ignored. Rows missing a company name or website are skipped.
+`data_companies`, `website`, and `Linkedin_url` map to the input
+contract; `Loc` and `Size` are carried through as ground truth for
+`location` and `companySize`, so the model is never asked to
+re-derive them. Other columns are ignored. Rows missing a company name or website are skipped.
 A sample export lives at `scripts/eyejee_export_example.json`.
 
 ### Error response — nothing usable in the export — `400 Bad Request`

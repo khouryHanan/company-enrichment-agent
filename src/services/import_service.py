@@ -21,6 +21,11 @@ Export row (only the fields we consume):
 NAME_FIELD = "data_companies"
 WEBSITE_FIELD = "website"
 LINKEDIN_FIELD = "Linkedin_url"
+# Facts the export already establishes. Carried through as ground truth
+# rather than left for the model to re-derive — it returned "unknown"
+# for sizes this file states outright.
+LOCATION_FIELD = "Loc"
+SIZE_FIELD = "Size"
 
 
 def _with_scheme(url: str | None) -> str | None:
@@ -63,6 +68,11 @@ def from_eyejee_export(rows: list[dict]) -> list[dict]:
         linkedin = _with_scheme(row.get(LINKEDIN_FIELD))
         if linkedin:
             company["linkedinUrl"] = linkedin
+
+        for export_field, our_field in ((LOCATION_FIELD, "location"), (SIZE_FIELD, "companySize")):
+            value = (row.get(export_field) or "").strip()
+            if value:
+                company[our_field] = value
 
         companies.append(company)
 

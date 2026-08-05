@@ -93,14 +93,45 @@ _llm = init_chat_model(settings.AI_MODEL, temperature=0.0)  # low-temperature, d
 _structured_llm = _llm.with_structured_output(CompanyProfile)
 
 
+# Profile fields the caller may already know. Supplied values are
+# authoritative: they overwrite the model's answer and clear the field
+# from missingFields. Populated today by the EYEjee import adapter from
+# the export's Loc/Size columns.
+KNOWN_FACT_FIELDS = ("location", "companySize")
+
+
+def known_facts(company) -> dict:
+    """The caller-supplied facts present on this company input. Blank and
+    placeholder values are ignored so an empty column never overwrites a
+    real answer with nothing."""
+    facts = {}
+
+    for field in KNOWN_FACT_FIELDS:
+        value = getattr(company, field, None)
+        if value and str(value).strip() and str(value).strip().lower() not in ("unknown", "not_available"):
+            facts[field] = str(value).strip()
+
+    return facts
+
+
 def build_prompt(company, normalized: dict) -> str:
-    return (
+    prompt = (
         f"Company name: {company.companyName}\n"
         f"Website URL: {normalized.get('normalizedWebsite', 'unknown')}\n"
         f"Domain: {normalized.get('domain', 'unknown')}\n"
-        f"LinkedIn URL: {company.linkedinUrl or 'unknown'}\n\n"
-        "Produce the structured company profile as specified."
+        f"LinkedIn URL: {company.linkedinUrl or 'unknown'}\n"
     )
+
+    # Stating known facts does not decide those fields — they are
+    # overwritten after the call regardless — but it stops the model
+    # reasoning about, say, a global enterprise when the caller already
+    # knows this is an 11-50 person US company.
+    facts = known_facts(company)
+    if facts:
+        stated = ", ".join(f"{field}: {value}" for field, value in facts.items())
+        prompt += f"Known facts (established by the caller, treat as true): {stated}\n"
+
+    return prompt + "\nProduce the structured company profile as specified."
 
 
 def _call_model(prompt: str) -> CompanyProfile:
@@ -145,6 +176,13 @@ def enrich_company(company, normalized: dict) -> dict:
 
     log.info("enrichment_completed", company_id=company_id, confidence=profile.confidence)
 
+    # Caller-supplied facts outrank inference, and a field the caller
+    # established is not missing — however the model answered it.
+    facts = known_facts(company)
+    missing_fields = [field for field in profile.missingFields if field not in facts]
+    if facts:
+        log.info("known_facts_applied", company_id=company_id, fields=",".join(sorted(facts)))
+
     return {
         "companyId": company_id,
         "companyName": profile.companyName,
@@ -153,15 +191,15 @@ def enrich_company(company, normalized: dict) -> dict:
         "productsServices": profile.productsServices,
         "targetAudience": profile.targetAudience,
         "businessModel": profile.businessModel,
-        "location": profile.location,
-        "companySize": profile.companySize,
+        "location": facts.get("location", profile.location),
+        "companySize": facts.get("companySize", profile.companySize),
         "foundedYear": profile.foundedYear,
         "headquarters": profile.headquarters,
         "keyCompetitors": profile.keyCompetitors,
         "techStack": profile.techStack,
         "keyContacts": profile.keyContacts,
         "confidence": profile.confidence,
-        "missingFields": profile.missingFields,
+        "missingFields": missing_fields,
         "sourcesUsed": profile.sourcesUsed,
         "status": "Completed",
     }

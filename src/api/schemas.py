@@ -15,6 +15,12 @@ class CompanyInput(BaseModel):
     companyName: str = Field(..., min_length=1, description="Required. Cannot be empty.")
     websiteUrl: str = Field(..., min_length=1, description="Required. Company website URL.")
     linkedinUrl: Optional[str] = Field(default=None, description="Optional. LinkedIn company profile URL.")
+    # Facts the caller already knows. When supplied they are treated as
+    # ground truth and overwrite whatever the model infers — see
+    # enrichment_service.known_facts. Populated by the EYEjee import
+    # adapter from the export's Loc/Size columns.
+    location: Optional[str] = Field(default=None, description="Optional. Known location — overrides AI inference.")
+    companySize: Optional[str] = Field(default=None, description="Optional. Known employee-count range — overrides AI inference.")
 
     @field_validator("companyName")
     @classmethod

@@ -81,7 +81,9 @@ quota — pick another (e.g. `gemini-flash-latest`).
 **Input** — `POST` body: `{"companies": [{"companyName", "websiteUrl",
 "linkedinUrl"?}, ...]}`. The list must be non-empty; `companyName` and a
 valid `websiteUrl` are required; `linkedinUrl` is optional but must be a
-LinkedIn company-profile URL when present.
+LinkedIn company-profile URL when present. `location` and `companySize` are
+also optional; when supplied they are treated as ground truth and are
+never overwritten by the model.
 
 **Output** — a batch summary (`batchId`, `status`, counts) from the POST,
 and per-company enrichment profiles from the company endpoint:
@@ -151,6 +153,13 @@ importance:
   companies, and the merge step promotes confidence one level when the
   website scan confirms evidence (recorded in `sourceReferences`) — the
   AI rated itself before any evidence existed.
+- **Known facts beat inference.** A caller can supply `location` and
+  `companySize` on the input; supplied values are stated in the prompt
+  and then overwrite whatever the model answered, and the field is
+  cleared from `missingFields`. The EYEjee import adapter populates them
+  from the export's `Loc`/`Size` columns — before this, the model was
+  asked to re-derive data the caller already had, and returned
+  `"unknown"` for sizes the export stated outright.
 - **Deterministic**: `temperature=0`.
 - **Fail fast on bad output**: one retry on malformed output, then the
   company is marked `Failed` (a model that returns garbage once tends to

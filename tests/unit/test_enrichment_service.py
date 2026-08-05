@@ -135,3 +135,75 @@ def test_call_model_wraps_provider_errors_as_ai_response_error(mock_structured_l
 
     with pytest.raises(AIResponseError):
         enrichment_service._call_model("some prompt")
+
+
+class KnownFactsCompany:
+    """Company input carrying facts the caller already established —
+    what the EYEjee import adapter produces from Loc/Size."""
+    companyName = "Example Company"
+    websiteUrl = "https://www.example.com"
+    linkedinUrl = None
+    location = "united states"
+    companySize = "11-50"
+
+
+@patch("src.services.enrichment_service._call_model")
+def test_known_facts_overwrite_what_the_model_inferred(mock_call):
+    mock_call.return_value = VALID_PROFILE.model_copy(
+        update={"location": "Germany", "companySize": "1000-5000"}
+    )
+
+    result = enrichment_service.enrich_company(KnownFactsCompany(), {})
+
+    assert result["location"] == "united states"
+    assert result["companySize"] == "11-50"
+
+
+@patch("src.services.enrichment_service._call_model")
+def test_known_facts_replace_unknown_answers(mock_call):
+    # The case that motivated this: the export states a size the model
+    # could not determine, so "unknown" must not reach the profile.
+    mock_call.return_value = VALID_PROFILE.model_copy(
+        update={"companySize": "unknown", "missingFields": ["companySize"]}
+    )
+
+    result = enrichment_service.enrich_company(KnownFactsCompany(), {})
+
+    assert result["companySize"] == "11-50"
+    assert "companySize" not in result["missingFields"]
+
+
+@patch("src.services.enrichment_service._call_model")
+def test_model_answer_stands_when_no_known_facts_supplied(mock_call):
+    mock_call.return_value = VALID_PROFILE.model_copy(update={"location": "Germany"})
+
+    result = enrichment_service.enrich_company(FakeCompany(), {})
+
+    assert result["location"] == "Germany"
+
+
+@patch("src.services.enrichment_service._call_model")
+def test_blank_known_fact_does_not_overwrite_a_real_answer(mock_call):
+    class BlankFacts(KnownFactsCompany):
+        location = "   "
+        companySize = "unknown"
+
+    mock_call.return_value = VALID_PROFILE.model_copy(
+        update={"location": "Tel Aviv, Israel", "companySize": "51-200"}
+    )
+
+    result = enrichment_service.enrich_company(BlankFacts(), {})
+
+    assert result["location"] == "Tel Aviv, Israel"
+    assert result["companySize"] == "51-200"
+
+
+def test_known_facts_are_stated_in_the_prompt():
+    prompt = enrichment_service.build_prompt(KnownFactsCompany(), {})
+
+    assert "Known facts" in prompt
+    assert "11-50" in prompt
+
+
+def test_prompt_omits_the_known_facts_line_when_there_are_none():
+    assert "Known facts" not in enrichment_service.build_prompt(FakeCompany(), {})
