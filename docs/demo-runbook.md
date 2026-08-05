@@ -73,6 +73,19 @@ curl -s -X POST http://localhost:8000/api/agents/agent1/bulk-enrichment \
   -H 'Content-Type: application/json' -d @scripts/demo_batch.json | python3 -m json.tool
 ```
 
+To demo on a **real EYEjee export** instead, use the platform's own
+format — click **Import EYEjee export** in the UI and pick
+`scripts/eyejee_export_example.json`, or from the terminal:
+
+```bash
+curl -s -X POST http://localhost:8000/api/agents/agent1/bulk-enrichment/import \
+  -H 'Content-Type: application/json' -d @scripts/eyejee_export_example.json | python3 -m json.tool
+```
+
+> **Say:** "This is the platform's export, unchanged — its field names,
+> its bare LinkedIn URLs. Agent 1 maps it at the boundary, so nobody has
+> to reshape a file to use this."
+
 Takes ~20–40 s (two live AI calls). Expected shape:
 
 ```json

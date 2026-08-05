@@ -100,3 +100,37 @@ def test_linkedin_url_is_optional():
         }
         response = client.post(ENDPOINT, json=request_without_linkedin)
         assert response.status_code == 200
+
+
+@patch("src.api.routes.batch_service.start_batch")
+def test_import_endpoint_accepts_eyejee_export(mock_start_batch):
+    mock_start_batch.return_value = {
+        "batchId": "batch_1", "status": "Completed", "totalReceived": 1,
+        "validCompanies": 1, "invalidCompanies": 0, "duplicates": 0,
+    }
+
+    response = client.post(
+        "/api/agents/agent1/bulk-enrichment/import",
+        json=[{
+            "data_companies": "LinkTrust",
+            "website": "https://linktrust.com",
+            "Linkedin_url": "linkedin.com/company/linktrust-systems-inc-",
+        }],
+    )
+
+    assert response.status_code == 200
+    submitted = mock_start_batch.call_args[0][0]
+    assert submitted[0].companyName == "LinkTrust"
+    # The bare LinkedIn URL must reach the batch already schemed, or
+    # validation would reject the company.
+    assert submitted[0].linkedinUrl == "https://linkedin.com/company/linktrust-systems-inc-"
+
+
+def test_import_endpoint_rejects_export_with_no_usable_rows():
+    response = client.post(
+        "/api/agents/agent1/bulk-enrichment/import",
+        json=[{"Keyword": "Marketing", "Loc": "united states"}],
+    )
+
+    assert response.status_code == 400
+    assert "no usable companies" in response.json()["detail"]

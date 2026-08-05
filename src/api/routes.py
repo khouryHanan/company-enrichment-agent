@@ -11,7 +11,7 @@ it is assembled belongs to the services.
 from fastapi import APIRouter, HTTPException
 
 from src.api.schemas import BulkEnrichmentRequest, BulkEnrichmentResponse, CompanyEnrichmentResult
-from src.services import agent3_integration, batch_service
+from src.services import agent3_integration, batch_service, import_service
 
 router = APIRouter()
 
@@ -35,6 +35,27 @@ def start_bulk_enrichment(payload: BulkEnrichmentRequest):
     duplicates) happens downstream in validation_service.py (SCRUM-5).
     """
     return batch_service.start_batch(payload.companies)
+
+
+@router.post("/api/agents/agent1/bulk-enrichment/import", response_model=BulkEnrichmentResponse)
+def start_bulk_enrichment_from_export(rows: list[dict]):
+    """
+    Accepts an EYEjee platform export (its own field names and bare URLs)
+    and runs it as a batch, so the platform can hand its company lists
+    over without reshaping them first.
+
+    The export is mapped to our input contract, then validated by the
+    same Pydantic models as the regular POST — an export that maps to
+    nothing usable is a 400, not an empty batch.
+    """
+    companies = import_service.from_eyejee_export(rows)
+    if not companies:
+        raise HTTPException(
+            status_code=400,
+            detail="no usable companies in export — each row needs a company name and website",
+        )
+    request = BulkEnrichmentRequest(companies=companies)
+    return batch_service.start_batch(request.companies)
 
 
 @router.get("/api/agents/agent1/bulk-enrichment/{batch_id}")

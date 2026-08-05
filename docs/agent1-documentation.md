@@ -103,6 +103,7 @@ Full JSON examples for every endpoint and error case:
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/api/agents/agent1/bulk-enrichment` | Submit a batch; returns the batch summary |
+| `POST` | `/api/agents/agent1/bulk-enrichment/import` | Submit an EYEjee platform export as-is (its own field names and bare URLs) |
 | `GET` | `/api/agents/agent1/bulk-enrichment/{batchId}` | Batch status + counts |
 | `GET` | `/api/agents/agent1/bulk-enrichment/{batchId}/companies` | Every company result in a batch, enriched and failed alike |
 | `GET` | `/api/companies/{companyId}` | One company's enriched profile |

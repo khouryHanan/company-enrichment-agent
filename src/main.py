@@ -65,5 +65,12 @@ def health_check():
 @app.get("/demo", include_in_schema=False)
 def demo_ui():
     """Client-facing demo UI (SCRUM-18) — a single self-contained page
-    styled after the EYEjee platform this agent extends."""
-    return FileResponse(Path(__file__).parent / "static" / "demo.html")
+    styled after the EYEjee platform this agent extends.
+
+    Sent no-store: the page is read from disk on every request, and a
+    cached copy silently hides edits made between demo runs.
+    """
+    return FileResponse(
+        Path(__file__).parent / "static" / "demo.html",
+        headers={"Cache-Control": "no-store"},
+    )

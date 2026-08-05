@@ -146,7 +146,8 @@
     </table>
     <div class="actions">
       <button class="btn btn-ghost" onclick="addRow()">+ Add company</button>
-      <button class="btn btn-ghost" onclick="loadDemo()">Load demo batch</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('file').click()">Import EYEjee export</button>
+      <input type="file" id="file" accept=".json,application/json" style="display:none" onchange="loadExport(this)">
       <button class="btn btn-primary" id="go" onclick="submitBatch()">Enrich companies&nbsp;→</button>
       <span class="stage" id="stage"></span>
     </div>
@@ -190,6 +191,39 @@ function loadDemo() {
   DEMO.forEach(r => addRow(...r));
 }
 
+// An EYEjee export uses the platform's own field names and ships bare
+// URLs; the server's import endpoint owns that mapping, so the page
+// only previews the rows here and posts the file as-is on submit.
+let pendingExport = null;
+
+async function loadExport(input) {
+  const file = input.files[0];
+  const err = document.getElementById("error");
+  err.style.display = "none";
+  if (!file) return;
+
+  try {
+    const rows = JSON.parse(await file.text());
+    if (!Array.isArray(rows) || !rows.length) throw new Error("expected a non-empty JSON array");
+
+    const preview = rows
+      .filter(r => r && (r.data_companies || "").trim() && (r.website || "").trim())
+      .map(r => [r.data_companies, r.website, r.Linkedin_url || ""]);
+    if (!preview.length) throw new Error("no rows with both a company name and a website");
+
+    document.getElementById("rows").innerHTML = "";
+    preview.forEach(r => addRow(...r));
+    pendingExport = rows;
+    document.getElementById("stage").innerHTML =
+      `<b>${preview.length}</b> companies loaded from ${esc(file.name)}`;
+  } catch (e) {
+    err.textContent = `Could not read ${file.name} — ${e.message}`;
+    err.style.display = "block";
+  } finally {
+    input.value = "";  // let the same file be picked again
+  }
+}
+
 function collect() {
   return [...document.querySelectorAll("#rows tr")].map(tr => {
     const [name, site, li] = [...tr.querySelectorAll("input")].map(i => i.value.trim());
@@ -226,11 +260,20 @@ async function submitBatch() {
   startStages();
 
   try {
-    const res = await fetch("/api/agents/agent1/bulk-enrichment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ companies }),
-    });
+    // An untouched export goes to the import endpoint so the server's
+    // mapping is the only one that runs; editing any row falls back to
+    // the plain endpoint using exactly what is on screen.
+    const res = pendingExport
+      ? await fetch("/api/agents/agent1/bulk-enrichment/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(pendingExport),
+        })
+      : await fetch("/api/agents/agent1/bulk-enrichment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companies }),
+        });
     // Read as text first: an unexpected server failure may not be JSON,
     // and a parse error would otherwise hide the real reason.
     const raw = await res.text();
@@ -327,6 +370,14 @@ async function health() {
     document.getElementById("dot-a3").className = (await r.json()).reachable ? "dot up" : "dot down";
   } catch { document.getElementById("dot-a3").className = "dot down"; }
 }
+
+// Any manual edit means the table, not the loaded file, is the truth.
+document.getElementById("rows").addEventListener("input", () => {
+  if (pendingExport) {
+    pendingExport = null;
+    document.getElementById("stage").textContent = "";
+  }
+});
 
 loadDemo();
 health();

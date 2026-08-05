@@ -69,6 +69,41 @@ summary once processing completes.
 
 ---
 
+## 1b. Start Bulk Enrichment from an EYEjee Export
+
+**`POST /api/agents/agent1/bulk-enrichment/import`**
+
+Accepts a platform export unchanged — its own field names, and URLs that
+may arrive without a scheme — maps it to the input contract above, and
+runs it as a normal batch. Returns the same batch summary.
+
+### Request body
+
+```json
+[
+  {
+    "data_companies": "LinkTrust",
+    "website": "https://linktrust.com",
+    "Linkedin_url": "linkedin.com/company/linktrust-systems-inc-",
+    "Keyword": "Marketing",
+    "Loc": "united states",
+    "Size": "11-50"
+  }
+]
+```
+
+Only `data_companies`, `website`, and `Linkedin_url` are consumed; other
+columns are ignored. Rows missing a company name or website are skipped.
+A sample export lives at `scripts/eyejee_export_example.json`.
+
+### Error response — nothing usable in the export — `400 Bad Request`
+
+```json
+{"detail": "no usable companies in export — each row needs a company name and website"}
+```
+
+---
+
 ## 2. Get Batch Status
 
 **`GET /api/agents/agent1/bulk-enrichment/{batchId}`**
